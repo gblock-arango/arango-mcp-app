@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from pathlib import Path
+from typing import Any
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -128,6 +131,9 @@ class ServerSettings(BaseSettings):
     )
 
 
+_DEFAULT_GENIE_SPACE_REGISTRY_TABLE = "workspace.default.genie_space_registry"
+
+
 class AppSettings(BaseSettings):
     """Main application settings container."""
 
@@ -142,18 +148,86 @@ class AppSettings(BaseSettings):
         description="UC Arango connection registry FQN (for deploy grants / future tools); env: ARANGO_REGISTRY_TABLE",
     )
 
+    debug_startup_checks: bool = Field(
+        default=False,
+        description="Run Genie startup diagnostics when the HTTP app boots; env: DEBUG_STARTUP_CHECKS",
+    )
+    debug_webhook_url: str = Field(
+        default="",
+        description="Optional POST target for startup debug payload; env: DEBUG_WEBHOOK_URL",
+    )
+
+    genie_space_id: str = Field(default="", description="env: GENIE_SPACE_ID")
+    genie_space_registry_table: str = Field(
+        default=_DEFAULT_GENIE_SPACE_REGISTRY_TABLE,
+        description="env: GENIE_SPACE_REGISTRY_TABLE",
+    )
+    genie_space_registry_auto_create: bool = Field(
+        default=True,
+        description="env: GENIE_SPACE_REGISTRY_AUTO_CREATE",
+    )
+    genie_auto_provision: bool = Field(default=True, description="env: GENIE_AUTO_PROVISION")
+    genie_disable_auto_provision: bool = Field(
+        default=False,
+        description="env: GENIE_DISABLE_AUTO_PROVISION",
+    )
+    genie_serialized_space: str = Field(default="", description="env: GENIE_SERIALIZED_SPACE")
+    genie_serialized_space_file: str = Field(
+        default="",
+        description="env: GENIE_SERIALIZED_SPACE_FILE",
+    )
+    genie_space_title: str = Field(
+        default="Genie (Arango agent)",
+        description="env: GENIE_SPACE_TITLE",
+    )
+    genie_space_description: str = Field(default="", description="env: GENIE_SPACE_DESCRIPTION")
+    genie_space_parent_path: str = Field(default="", description="env: GENIE_SPACE_PARENT_PATH")
+    genie_provision_lock_path: str = Field(default="", description="env: GENIE_PROVISION_LOCK_PATH")
+    genie_message_timeout_seconds: float = Field(
+        default=600.0,
+        description="env: GENIE_MESSAGE_TIMEOUT_SECONDS",
+    )
+
     arango: ArangoDBSettings = Field(default_factory=ArangoDBSettings)
     gateway: GatewaySettings = Field(default_factory=GatewaySettings)
     server: ServerSettings = Field(default_factory=ServerSettings)
 
 
 def gateway_resolution_config(app: AppSettings) -> dict[str, str]:
-    """Mapping expected by :func:`arango_mcp.services.gateway_url_registry.effective_gateway_base_url`."""
+    """Mapping expected by :func:`arango_agent.services.gateway_url_registry.effective_gateway_base_url`."""
     return {
         "ARANGO_GATEWAY_BASE_URL": app.gateway.base_url,
         "ARANGO_GATEWAY_REGISTRY_TABLE": app.gateway.registry_table,
         "DATABRICKS_SQL_WAREHOUSE_ID": app.databricks_sql_warehouse_id,
     }
+
+
+def flask_app_config(app: AppSettings | None = None) -> dict[str, Any]:
+    """Uppercase keys for Flask ``app.config`` (Genie registry + gateway URL resolution)."""
+    s = app or settings
+    return {
+        **gateway_resolution_config(s),
+        "ARANGO_REGISTRY_TABLE": s.arango_registry_table,
+        "DEBUG_STARTUP_CHECKS": s.debug_startup_checks,
+        "DEBUG_WEBHOOK_URL": s.debug_webhook_url,
+        "GENIE_SPACE_ID": s.genie_space_id,
+        "GENIE_SPACE_REGISTRY_TABLE": s.genie_space_registry_table,
+        "GENIE_SPACE_REGISTRY_AUTO_CREATE": s.genie_space_registry_auto_create,
+        "GENIE_AUTO_PROVISION": s.genie_auto_provision,
+        "GENIE_DISABLE_AUTO_PROVISION": s.genie_disable_auto_provision,
+        "GENIE_SERIALIZED_SPACE": s.genie_serialized_space,
+        "GENIE_SERIALIZED_SPACE_FILE": s.genie_serialized_space_file,
+        "GENIE_SPACE_TITLE": s.genie_space_title,
+        "GENIE_SPACE_DESCRIPTION": s.genie_space_description,
+        "GENIE_SPACE_PARENT_PATH": s.genie_space_parent_path,
+        "GENIE_PROVISION_LOCK_PATH": s.genie_provision_lock_path,
+        "GENIE_MESSAGE_TIMEOUT_SECONDS": s.genie_message_timeout_seconds,
+    }
+
+
+def genie_cli_config_dict() -> dict[str, Any]:
+    """Config dict for ``src/provision_genie_uc.py`` / deploy scripts (uses process env via ``settings``)."""
+    return flask_app_config(settings)
 
 
 # Global settings instance

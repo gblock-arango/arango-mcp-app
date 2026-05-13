@@ -6,7 +6,10 @@ authors = ["ArangoDB GmbH <info@arangodb.com>"]
 readme = "README.md"
 package-mode = true
 
-packages = [{ include = "arango_mcp", from = "src" }]
+packages = [
+    { include = "arango_mcp", from = "src" },
+    { include = "arango_agent", from = "src" },
+]
 
 [tool.poetry.dependencies]
 python = "^3.10"
@@ -17,6 +20,9 @@ pydantic = "^2.0.0"
 pydantic-settings = "^2.0.0"
 anyio = "^4.5.0"
 databricks-sdk = "^0.36.0"
+flask = "^3.0.0"
+gunicorn = "^22.0.0"
+requests = "^2.31.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

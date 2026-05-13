@@ -7,8 +7,8 @@ include:
 variables:
   # Optional: use with ``databricks bundle deploy`` / CI. ``./deploy_app.sh`` uses ``app.yaml`` defaults.
   sql_warehouse_id:
-    description: "Databricks SQL warehouse id (hex)"
-    default: "473d40703241ee4c"
+    description: "Databricks SQL warehouse id (hex) — set via bundle --var, env, or parent arango-platform-bundle (no default)."
+    default: ""
   arango_gateway_base_url:
     description: "Optional deployed arango-gateway-app URL (https://....cloud.databricksapps.com)"
     default: ""

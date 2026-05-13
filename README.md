@@ -13,7 +13,9 @@ This should be an agent endpoint/tool-calling service, not the owner of determin
 
 The Databricks MCP server, **gateway-backed Arango access**, and Databricks App metadata live at this **repository root** (alongside the `arango-solutions-mcp/` reference submodule). **Apache-2.0** — see `LICENSE`.
 
-**Gateway mode:** optional `ARANGO_GATEWAY_BASE_URL`; otherwise resolve the active URL from `ARANGO_GATEWAY_REGISTRY_TABLE` using `DATABRICKS_SQL_WAREHOUSE_ID` (same pattern as `arango-dashboard-app`). `ARANGO_GATEWAY_BEARER_TOKEN` is optional. **Deploy / UC grants:** run `./deploy_app.sh` from this directory.
+**Gateway mode:** optional `ARANGO_GATEWAY_BASE_URL`; otherwise resolve the active URL from `ARANGO_GATEWAY_REGISTRY_TABLE` using `DATABRICKS_SQL_WAREHOUSE_ID` (same pattern as `arango-dashboard-app`). `ARANGO_GATEWAY_BEARER_TOKEN` is optional. **Deploy / UC grants:** run `./deploy_app.sh` from this directory (includes Genie registry table + app SP grants when `GENIE_SPACE_REGISTRY_TABLE` is set).
+
+**Genie (UC registry / shell provision, not the app SP):** from this repo root, `./update_genie_registry_uc.sh` or `PYTHONPATH=src python src/provision_genie_uc.py` — see script headers. The Databricks App runs Genie HTTP (`gunicorn wsgi:app`); startup and `POST /api/deploy/reconcile-genie` live in this codebase.
 
 ---
 
@@ -103,11 +105,11 @@ poetry install
 
 #### Databricks + `arango-gateway-app`
 
-Optional `ARANGO_GATEWAY_BASE_URL`; otherwise the active row in `ARANGO_GATEWAY_REGISTRY_TABLE` read with `DATABRICKS_SQL_WAREHOUSE_ID` via the Databricks SDK (same as `arango-dashboard-app`). `ARANGO_GATEWAY_BEARER_TOKEN` is optional. Repo layout matches `arango-gateway-app`: `app.yaml`, `databricks.yml`, `deploy_app.sh`, `resources/` at this root; Python under `src/arango_mcp/`.
+Optional `ARANGO_GATEWAY_BASE_URL`; otherwise the active row in `ARANGO_GATEWAY_REGISTRY_TABLE` read with `DATABRICKS_SQL_WAREHOUSE_ID` via the Databricks SDK (same as `arango-dashboard-app`). `ARANGO_GATEWAY_BEARER_TOKEN` is optional. Repo layout: `app.yaml`, `databricks.yml`, `deploy_app.sh`, `resources/` at repo root; Python packages under `src/arango_mcp/` (MCP + Arango) and `src/arango_agent/` (HTTP app, Genie, UC helpers).
 
 | Variable | When | Description |
 |----------|------|-------------|
-| `DATABRICKS_SQL_WAREHOUSE_ID` | UC URL resolution | Warehouse for statement execution against the gateway registry |
+| `DATABRICKS_SQL_WAREHOUSE_ID` | Required for UC gateway URL resolution | Warehouse id for reading `ARANGO_GATEWAY_REGISTRY_TABLE`; set via `export`, `app.yaml`, or **arango-platform-bundle** `sql_warehouse_id` |
 | `ARANGO_GATEWAY_REGISTRY_TABLE` | Optional | Defaults to `workspace.default.arango_gateway_registry` |
 | `ARANGO_REGISTRY_TABLE` | Optional | Defaults to `workspace.default.arango_connection_registry` (deploy grants / future reads) |
 | `ARANGO_GATEWAY_BEARER_TOKEN` | Rare | Only if gateway ingress requires Bearer |
@@ -278,7 +280,6 @@ Layout mirrors **arango-gateway-app** (Databricks bundle + app metadata at repo 
 ```
 arango-agent/   (this repository — MCP server at root)
 ├── app.yaml
-├── app.py
 ├── databricks.yml
 ├── deploy_app.sh
 ├── requirements.txt
@@ -286,8 +287,14 @@ arango-agent/   (this repository — MCP server at root)
 ├── resources/
 │   └── arango_mcp.app.yml
 ├── src/
+│   ├── app.py                 # local stdio MCP: PYTHONPATH=src python src/app.py
+│   ├── provision_genie_uc.py  # Genie UC shell provision
 │   ├── wsgi.py
-│   └── arango_mcp/
+│   ├── arango_agent/          # Databricks App (HTTP/Genie), UC/SQL — not MCP tools
+│   │   ├── webapp.py
+│   │   ├── routes/
+│   │   └── services/
+│   └── arango_mcp/            # MCP + Arango tool/agent code only
 │       ├── main.py
 │       ├── server.py
 │       ├── config.py
@@ -295,7 +302,6 @@ arango-agent/   (this repository — MCP server at root)
 │       ├── gateway_arango_client.py
 │       ├── gateway_database.py
 │       ├── aql_utils.py
-│       ├── services/
 │       ├── agents/
 │       ├── mcp_tools/
 │       └── manuals/
@@ -307,6 +313,7 @@ The codebase follows a two-layer pattern:
 
 - **MCP Tools** (`src/arango_mcp/mcp_tools/`) — thin FastMCP-decorated functions that validate inputs and delegate to agents.
 - **Agents** (`src/arango_mcp/agents/`) — business logic classes inheriting from `ArangoAgentBase` (direct `python-arango` or gateway HTTP).
+- **Databricks App** (`src/arango_agent/`) — Flask HTTP (Genie), UC registry helpers, gateway URL resolution; separate from MCP tool modules so additional MCP packages can coexist.
 
 ---
 

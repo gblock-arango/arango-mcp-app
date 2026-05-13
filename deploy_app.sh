@@ -6,8 +6,14 @@ set -euo pipefail
 #   ./deploy_app.sh
 #
 # Optional positional overrides: app-name, workspace source path, profile, then placeholders
-#   $4–$7 (tunnel/cluster/registry/warehouse); only profile and warehouse matter for UC grants.
+#   $4–$7 (tunnel/cluster/registry/warehouse); set ``DATABRICKS_SQL_WAREHOUSE_ID`` or pass ``$7``
+#   (no built-in warehouse id). Only profile + warehouse matter for UC grants.
 # Gateway URL + connection registry rows are maintained by arango-gateway-app.
+#
+# Genie: when ``GENIE_SPACE_REGISTRY_TABLE`` is non-empty, this script ensures the UC Delta registry
+# table exists and grants the **agent** app SP SELECT+MODIFY (same pattern as arango-dashboard-app).
+# Space create/validate runs inside the deployed app at startup. Skip Genie UC steps:
+#   GENIE_SPACE_REGISTRY_TABLE= ./deploy_app.sh
 #
 # On first run, if the Databricks App name does not exist yet, the script runs
 # ``databricks apps create`` before ``databricks apps deploy``.
@@ -38,8 +44,9 @@ fi
 LOCAL_ARANGO_URL="${4:-https://127.0.0.1:18529}"
 CLUSTER_NAME="${5:-local-minikube-dev}"
 REGISTRY_TABLE="${ARANGO_REGISTRY_TABLE:-${6:-workspace.default.arango_connection_registry}}"
-WAREHOUSE_ID="${DATABRICKS_SQL_WAREHOUSE_ID:-${7:-473d40703241ee4c}}"
+WAREHOUSE_ID="${DATABRICKS_SQL_WAREHOUSE_ID:-${7:-}}"
 ARANGO_GATEWAY_REGISTRY_TABLE="${ARANGO_GATEWAY_REGISTRY_TABLE:-workspace.default.arango_gateway_registry}"
+GENIE_SPACE_REGISTRY_TABLE="${GENIE_SPACE_REGISTRY_TABLE-workspace.default.genie_space_registry}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -x "${SCRIPT_DIR}/.venv/bin/python3" ]]; then
   PYTHON_BIN="${SCRIPT_DIR}/.venv/bin/python3"
@@ -88,7 +95,7 @@ databricks sync . "${SOURCE_CODE_PATH}" "${PROFILE_ARGS[@]}"
 if ! databricks apps get "${APP_NAME}" "${PROFILE_ARGS[@]}" &>/dev/null; then
   echo "Creating Databricks App '${APP_NAME}' (not found in workspace; first-time setup)..."
   databricks apps create "${APP_NAME}" \
-    --description "Arango MCP — tools via arango-gateway-app; UC gateway URL like dashboard" \
+    --description "Arango agent — MCP + HTTP (Genie); gateway-backed Arango; UC gateway URL" \
     "${PROFILE_ARGS[@]}"
 fi
 
@@ -115,6 +122,11 @@ if [[ -z "${APP_URL}" ]]; then
 fi
 if [[ -z "${APP_SERVICE_PRINCIPAL_CLIENT_ID}" ]]; then
   echo "ERROR: Could not extract app service principal client id." >&2
+  exit 1
+fi
+
+if [[ -z "${WAREHOUSE_ID// }" ]]; then
+  echo "ERROR: DATABRICKS_SQL_WAREHOUSE_ID is not set (export it, set in app.yaml, use arango-platform-bundle variables, or pass as 7th positional arg to deploy_app.sh)." >&2
   exit 1
 fi
 
@@ -164,6 +176,90 @@ run_sql_statement "GRANT SELECT ON TABLE ${REGISTRY_TABLE} TO \`${APP_SERVICE_PR
 echo "Granting SELECT on gateway URL registry (${ARANGO_GATEWAY_REGISTRY_TABLE}) to MCP app SP..."
 if ! ( run_sql_statement "GRANT SELECT ON TABLE ${ARANGO_GATEWAY_REGISTRY_TABLE} TO \`${APP_SERVICE_PRINCIPAL_CLIENT_ID}\`" ); then
   echo "NOTE: GRANT on ${ARANGO_GATEWAY_REGISTRY_TABLE} failed (create it by deploying arango-gateway-app once). MCP will resolve gateway URL after the table exists." >&2
+fi
+
+resolve_genie_registry_deploy_grantee() {
+  local name="" json=""
+  if [[ -n "${GENIE_REGISTRY_DEPLOY_GRANTEE:-}" ]]; then
+    echo "${GENIE_REGISTRY_DEPLOY_GRANTEE}"
+    return 0
+  fi
+  name="$(
+    PYTHONPATH="${SCRIPT_DIR}/src" "${PYTHON_BIN}" -c "
+import sys
+try:
+    from databricks.sdk import WorkspaceClient
+    me = WorkspaceClient().current_user.me()
+    print((me.user_name or '').strip())
+except Exception:
+    sys.exit(1)
+" 2>/dev/null
+  )" || true
+  if [[ -n "${name}" ]]; then
+    echo "${name}"
+    return 0
+  fi
+  json="$(databricks current-user me -o json "${PROFILE_ARGS[@]}" 2>/dev/null || echo '{}')"
+  name="$("${PYTHON_BIN}" -c 'import json,sys; d=json.load(sys.stdin); print((d.get("userName") or d.get("user_name") or "").strip())' <<< "${json}" 2>/dev/null || true)"
+  if [[ -n "${name}" ]]; then
+    echo "${name}"
+    return 0
+  fi
+  json="$(databricks api get /api/2.0/preview/users/me "${PROFILE_ARGS[@]}" 2>/dev/null || echo '{}')"
+  name="$("${PYTHON_BIN}" -c 'import json,sys; d=json.load(sys.stdin); print((d.get("userName") or d.get("user_name") or "").strip())' <<< "${json}" 2>/dev/null || true)"
+  if [[ -n "${name}" ]]; then
+    echo "${name}"
+    return 0
+  fi
+  return 1
+}
+
+if [[ -n "${GENIE_SPACE_REGISTRY_TABLE}" ]]; then
+  GENIE_REG_CATALOG="$(echo "${GENIE_SPACE_REGISTRY_TABLE}" | cut -d. -f1)"
+  GENIE_REG_SCHEMA="$(echo "${GENIE_SPACE_REGISTRY_TABLE}" | cut -d. -f2)"
+  GENIE_REG_NAME="$(echo "${GENIE_SPACE_REGISTRY_TABLE}" | cut -d. -f3)"
+  if [[ -z "${GENIE_REG_CATALOG}" || -z "${GENIE_REG_SCHEMA}" || -z "${GENIE_REG_NAME}" ]]; then
+    echo "ERROR: GENIE_SPACE_REGISTRY_TABLE must be catalog.schema.table (got '${GENIE_SPACE_REGISTRY_TABLE}')" >&2
+    exit 1
+  fi
+
+  export GENIE_SPACE_REGISTRY_TABLE
+  export DATABRICKS_SQL_WAREHOUSE_ID="${WAREHOUSE_ID}"
+
+  echo "Ensuring Genie registry table exists (Databricks CLI / default login; app OAuth not used here)..."
+  _ge_ensure=(env)
+  if [[ -n "${PROFILE}" ]]; then
+    _ge_ensure+=("DATABRICKS_CONFIG_PROFILE=${PROFILE}")
+  fi
+  _ge_ensure+=(-u DATABRICKS_CLIENT_ID -u DATABRICKS_CLIENT_SECRET PYTHONPATH="${SCRIPT_DIR}/src" "${PYTHON_BIN}" -c "
+import sys
+sys.path.insert(0, \"${SCRIPT_DIR}/src\")
+from arango_mcp.config import genie_cli_config_dict
+from arango_agent.services.genie_registry import ensure_genie_registry_table
+cfg = genie_cli_config_dict()
+ensure_genie_registry_table(cfg[\"GENIE_SPACE_REGISTRY_TABLE\"], cfg[\"DATABRICKS_SQL_WAREHOUSE_ID\"])
+")
+  "${_ge_ensure[@]}"
+  echo "NOTE: That step only creates the Delta Genie registry table (if missing)."
+  echo "Genie Space create/validate runs inside the agent app at startup (app OAuth)."
+  echo "Optional strict reconcile: POST ${APP_URL%/}/api/deploy/reconcile-genie with a token valid for *.databricksapps.com."
+
+  echo "Granting UC privileges on Genie space registry table '${GENIE_SPACE_REGISTRY_TABLE}'..."
+  run_sql_statement "GRANT USE CATALOG ON CATALOG ${GENIE_REG_CATALOG} TO \`${APP_SERVICE_PRINCIPAL_CLIENT_ID}\`"
+  run_sql_statement "GRANT USE SCHEMA ON SCHEMA ${GENIE_REG_CATALOG}.${GENIE_REG_SCHEMA} TO \`${APP_SERVICE_PRINCIPAL_CLIENT_ID}\`"
+  run_sql_statement "GRANT SELECT ON TABLE ${GENIE_SPACE_REGISTRY_TABLE} TO \`${APP_SERVICE_PRINCIPAL_CLIENT_ID}\`"
+  run_sql_statement "GRANT MODIFY ON TABLE ${GENIE_SPACE_REGISTRY_TABLE} TO \`${APP_SERVICE_PRINCIPAL_CLIENT_ID}\`"
+
+  DEPLOY_USER="$(resolve_genie_registry_deploy_grantee 2>/dev/null || true)"
+  if [[ -n "${DEPLOY_USER}" ]]; then
+    echo "Granting SELECT, MODIFY on Genie registry to '${DEPLOY_USER}' (for manual PAT-based provision if you use it)..."
+    if ! ( run_sql_statement "GRANT SELECT, MODIFY ON TABLE ${GENIE_SPACE_REGISTRY_TABLE} TO \`${DEPLOY_USER}\`" ); then
+      echo "WARNING: Could not GRANT registry table to '${DEPLOY_USER}'. If the table was created by the app service principal, ask a metastore admin to run:" >&2
+      echo "  GRANT SELECT, MODIFY ON TABLE ${GENIE_SPACE_REGISTRY_TABLE} TO \`${DEPLOY_USER}\`;" >&2
+    fi
+  else
+    echo "NOTE: Set GENIE_REGISTRY_DEPLOY_GRANTEE to your user email if a GRANT to the deploy identity is required." >&2
+  fi
 fi
 
 echo

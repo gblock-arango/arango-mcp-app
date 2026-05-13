@@ -7,8 +7,8 @@ import threading
 import time
 from typing import Any
 
-from arango_mcp.services.databricks_sql import execute_sql
-from arango_mcp.services.registry_types import parse_fqn_table
+from arango_agent.services.databricks_sql import execute_sql
+from arango_agent.services.registry_types import parse_fqn_table
 
 logger = logging.getLogger(__name__)
 

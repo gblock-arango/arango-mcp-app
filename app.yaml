@@ -1,16 +1,17 @@
 command:
   - "bash"
   - "-lc"
-  - "export PYTHONPATH=src && exec python app.py"
+  - "export PYTHONPATH=src && gunicorn wsgi:app --bind 0.0.0.0:${DATABRICKS_APP_PORT:-8000} --workers 2 --timeout 660"
 
-# Literal defaults mirror ``databricks.yml`` so ``./deploy_app.sh`` works without substitution.
+# ``DATABRICKS_SQL_WAREHOUSE_ID`` must be set for UC SQL (no default): export, ``app.yaml`` in your
+# deployment, or parent bundle (e.g. arango-platform-bundle ``sql_warehouse_id`` → apps config).
 # ``ARANGO_GATEWAY_BASE_URL`` is optional: when empty, the server reads the active URL from
-# ``ARANGO_GATEWAY_REGISTRY_TABLE`` (written by arango-gateway-app), same as arango-dashboard-app.
+# ``ARANGO_GATEWAY_REGISTRY_TABLE`` (written by arango-gateway-app).
 
 env:
   - name: DATABRICKS_SQL_WAREHOUSE_ID
-    description: "SQL warehouse for UC reads (gateway URL registry)"
-    value: "473d40703241ee4c"
+    description: "SQL warehouse for UC reads + Genie registry; required when using SQL/UC from this app"
+    value: ""
   - name: ARANGO_GATEWAY_BASE_URL
     description: "Optional override for gateway URL (no trailing slash). When empty, resolved from UC"
     value: ""
@@ -18,10 +19,46 @@ env:
     description: "UC Delta table where arango-gateway-app publishes base_url (catalog.schema.table)"
     value: "workspace.default.arango_gateway_registry"
   - name: ARANGO_REGISTRY_TABLE
-    description: "UC connection registry (SELECT for parity with dashboard; MCP uses gateway for Arango I/O)"
+    description: "UC connection registry (SELECT for deploy grants / parity with dashboard)"
     value: "workspace.default.arango_connection_registry"
   - name: ARANGO_DEFAULT_DB_NAME
     value: "_system"
+  - name: DEBUG_STARTUP_CHECKS
+    value: "true"
+  - name: DEBUG_WEBHOOK_URL
+    value: ""
+  - name: GENIE_SPACE_ID
+    value: ""
+  - name: GENIE_SPACE_REGISTRY_TABLE
+    value: "workspace.default.genie_space_registry"
+  - name: GENIE_SPACE_REGISTRY_AUTO_CREATE
+    value: "true"
+  - name: GENIE_AUTO_PROVISION
+    description: "If true and GENIE_SPACE_ID is empty and UC has no usable active row, app calls Genie create_space and upserts into GENIE_SPACE_REGISTRY_TABLE at startup (file lock avoids duplicate spaces under Gunicorn)."
+    value: "true"
+  - name: GENIE_DISABLE_AUTO_PROVISION
+    description: "When true, the app will not create a Genie space via API when UC has none / unusable (default false — server auto-provision is on)"
+    value: "false"
+  - name: GENIE_SERIALIZED_SPACE
+    value: ""
+  - name: GENIE_SERIALIZED_SPACE_FILE
+    value: ""
+  - name: GENIE_SPACE_TITLE
+    value: "Genie (Arango agent)"
+  - name: GENIE_SPACE_DESCRIPTION
+    value: ""
+  - name: GENIE_SPACE_PARENT_PATH
+    value: ""
+  - name: GENIE_PROVISION_LOCK_PATH
+    value: ""
+  - name: GENIE_MESSAGE_TIMEOUT_SECONDS
+    value: "600"
+  - name: GENIE_VERIFY_GENIE_SPACE_READABLE
+    description: "When true, app checks Genie get_space before using UC registry id; unreadable ids are deactivated so server auto-provision can insert an app-SP-owned space"
+    value: "true"
+  - name: GENIE_USE_APP_RUNTIME_AUTH_FOR_SDK
+    description: "When true (default), Genie in a Databricks App uses plain WorkspaceClient() (this app's injected OAuth client). Off-platform, with HOST+CLIENT_ID+SECRET set, Genie may strip those vars so DATABRICKS_TOKEN can be used. SQL/UC still uses default WorkspaceClient. Set false for local Genie tests that must force M2M."
+    value: "true"
 
 resources:
   - name: sql-warehouse
