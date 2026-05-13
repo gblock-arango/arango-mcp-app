@@ -20,7 +20,7 @@ set -euo pipefail
 # ``databricks apps create`` before ``databricks apps deploy``. A brand-new app often shows
 # ``app_status=UNAVAILABLE`` until the first deploy; that is normal (see ``ensure_app_running_before_deploy``).
 
-APP_NAME="${1:-arango-mcp-app}"
+APP_NAME="${1:-arango-agent-app}"
 PROFILE="${3:-}"
 
 _resolve_ws_user() {

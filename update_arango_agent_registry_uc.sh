@@ -11,7 +11,7 @@ set -euo pipefail
 # Optional env: AGENT_REGISTRY_UC_UPSERT_RETRIES (default 10) — retries on concurrent Delta writes.
 
 BASE_URL_INPUT="${1:-${DATABRICKS_APP_URL:-}}"
-APP_NAME_INPUT="${2:-${DATABRICKS_APP_NAME:-arango-mcp-app}}"
+APP_NAME_INPUT="${2:-${DATABRICKS_APP_NAME:-arango-agent-app}}"
 REGISTRY_TABLE="${3:-${ARANGO_AGENT_REGISTRY_TABLE:-workspace.default.arango_agent_registry}}"
 WAREHOUSE_ID="${4:-${DATABRICKS_SQL_WAREHOUSE_ID:-}}"
 PROFILE="${5:-}"
@@ -98,17 +98,23 @@ if ! ( run_sql "GRANT SELECT, MODIFY ON TABLE ${FQTBL} TO \`account users\`" ); 
 fi
 
 echo "Upserting active arango-agent base URL into ${REGISTRY_TABLE}..."
+# Idempotent MERGE so concurrent writers (this script + gunicorn workers running
+# publish_agent_base_url on startup) cannot leave duplicate active rows. The MERGE
+# atomically (a) inserts the row when missing, (b) re-activates an existing row for
+# this base_url, and (c) deactivates every other ``is_active=TRUE`` row via
+# ``WHEN NOT MATCHED BY SOURCE``. Delta optimistic concurrency conflicts get retried
+# below.
+MERGE_SQL="MERGE INTO ${FQTBL} t USING (SELECT '${ESC_URL}' AS base_url, '${ESC_APP}' AS app_name, current_timestamp() AS updated_at) s ON t.base_url = s.base_url WHEN MATCHED THEN UPDATE SET app_name = s.app_name, is_active = TRUE, updated_at = s.updated_at WHEN NOT MATCHED THEN INSERT (base_url, app_name, is_active, updated_at) VALUES (s.base_url, s.app_name, TRUE, s.updated_at) WHEN NOT MATCHED BY SOURCE AND t.is_active = TRUE THEN UPDATE SET is_active = FALSE, updated_at = current_timestamp()"
 UPSERT_ATTEMPTS="${AGENT_REGISTRY_UC_UPSERT_RETRIES:-10}"
 for attempt in $(seq 1 "${UPSERT_ATTEMPTS}"); do
-  if run_sql "UPDATE ${FQTBL} SET is_active = FALSE WHERE is_active = TRUE" &&
-    run_sql "INSERT INTO ${FQTBL} (base_url, app_name, is_active, updated_at) VALUES ('${ESC_URL}', '${ESC_APP}', TRUE, current_timestamp())"; then
+  if run_sql "${MERGE_SQL}"; then
     break
   fi
   if [[ "${attempt}" -ge "${UPSERT_ATTEMPTS}" ]]; then
-    echo "ERROR: agent registry upsert failed after ${UPSERT_ATTEMPTS} attempts." >&2
+    echo "ERROR: agent registry MERGE failed after ${UPSERT_ATTEMPTS} attempts." >&2
     exit 1
   fi
-  echo "NOTE: UC upsert conflict; retrying (${attempt}/${UPSERT_ATTEMPTS})..." >&2
+  echo "NOTE: UC MERGE conflict (often concurrent app startup); retrying (${attempt}/${UPSERT_ATTEMPTS})..." >&2
   sleep $((1 + attempt))
 done
 
