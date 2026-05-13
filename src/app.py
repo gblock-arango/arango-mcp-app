@@ -1,4 +1,4 @@
-"""Local MCP entrypoint (stdio). Databricks Apps HTTP uses ``gunicorn wsgi:app`` — see ``app.yaml``."""
+"""Local MCP entrypoint (stdio). Databricks Apps HTTP uses ``gunicorn asgi:app`` — see ``app.yaml``."""
 
 from arango_mcp.main import run_server_cli
 

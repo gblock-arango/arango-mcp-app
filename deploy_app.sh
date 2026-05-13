@@ -8,7 +8,8 @@ set -euo pipefail
 # Optional positional overrides: app-name, workspace source path, profile, then placeholders
 #   $4–$7 (tunnel/cluster/registry/warehouse); set ``DATABRICKS_SQL_WAREHOUSE_ID`` or pass ``$7``
 #   (no built-in warehouse id). Only profile + warehouse matter for UC grants.
-# Gateway URL + connection registry rows are maintained by arango-gateway-app.
+# Gateway URL + agent URL registries: gateway table is written by arango-gateway-app; agent table
+# by arango-agent (this script publishes after deploy). Dashboard reads both via UC when env URLs are empty.
 #
 # Genie: when ``GENIE_SPACE_REGISTRY_TABLE`` is non-empty, this script ensures the UC Delta registry
 # table exists and grants the **agent** app SP SELECT+MODIFY (same pattern as arango-dashboard-app).
@@ -16,7 +17,8 @@ set -euo pipefail
 #   GENIE_SPACE_REGISTRY_TABLE= ./deploy_app.sh
 #
 # On first run, if the Databricks App name does not exist yet, the script runs
-# ``databricks apps create`` before ``databricks apps deploy``.
+# ``databricks apps create`` before ``databricks apps deploy``. A brand-new app often shows
+# ``app_status=UNAVAILABLE`` until the first deploy; that is normal (see ``ensure_app_running_before_deploy``).
 
 APP_NAME="${1:-arango-mcp-app}"
 PROFILE="${3:-}"
@@ -46,7 +48,8 @@ CLUSTER_NAME="${5:-local-minikube-dev}"
 REGISTRY_TABLE="${ARANGO_REGISTRY_TABLE:-${6:-workspace.default.arango_connection_registry}}"
 WAREHOUSE_ID="${DATABRICKS_SQL_WAREHOUSE_ID:-${7:-}}"
 ARANGO_GATEWAY_REGISTRY_TABLE="${ARANGO_GATEWAY_REGISTRY_TABLE:-workspace.default.arango_gateway_registry}"
-GENIE_SPACE_REGISTRY_TABLE="${GENIE_SPACE_REGISTRY_TABLE-workspace.default.genie_space_registry}"
+ARANGO_AGENT_REGISTRY_TABLE="${ARANGO_AGENT_REGISTRY_TABLE:-workspace.default.arango_agent_registry}"
+GENIE_SPACE_REGISTRY_TABLE="${GENIE_SPACE_REGISTRY_TABLE:-workspace.default.genie_space_registry}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -x "${SCRIPT_DIR}/.venv/bin/python3" ]]; then
   PYTHON_BIN="${SCRIPT_DIR}/.venv/bin/python3"
@@ -66,7 +69,7 @@ else
 fi
 
 ensure_app_running_before_deploy() {
-  local json app_state compute_state
+  local json app_state compute_state app_msg
   if ! json="$(databricks apps get "${APP_NAME}" --output json "${PROFILE_ARGS[@]}" 2>/dev/null)"; then
     return 0
   fi
@@ -76,12 +79,24 @@ ensure_app_running_before_deploy() {
   compute_state="$(
     "${PYTHON_BIN}" -c 'import json,sys; d=json.load(sys.stdin); print((d.get("compute_status") or {}).get("state",""))' <<< "${json}" 2>/dev/null || true
   )"
+  app_msg="$(
+    "${PYTHON_BIN}" -c 'import json,sys; d=json.load(sys.stdin); print((d.get("app_status") or {}).get("message",""))' <<< "${json}" 2>/dev/null || true
+  )"
   if [[ "${app_state}" == "RUNNING" ]]; then
     echo "App '${APP_NAME}' is RUNNING; proceeding to deploy."
     return 0
   fi
+  # After `apps create`, compute is often ACTIVE while app_status stays UNAVAILABLE until the first
+  # `apps deploy`. Starting the app in that state only produces CLI noise; deploy succeeds anyway.
+  if [[ "${app_state}" == "UNAVAILABLE" && "${compute_state}" == "ACTIVE" ]]; then
+    if echo "${app_msg}" | grep -qiE 'not been deployed|deploy(ing)?[[:space:]]+source|run your app by deploying'; then
+      echo "NOTE: App '${APP_NAME}' has no source deployment yet (app_status=UNAVAILABLE, compute_status=ACTIVE)."
+      echo "      Skipping \`databricks apps start\`; the next step (\`databricks apps deploy\`) uploads code and should make the app available."
+      return 0
+    fi
+  fi
   echo "App '${APP_NAME}' is not RUNNING (app_status=${app_state:-unknown}, compute_status=${compute_state:-unknown})."
-  echo "Deploy requires RUNNING; starting app (waits until compute is active)..."
+  echo "Trying \`databricks apps start\` so compute is ready (deploy may still succeed if the platform accepts it)..."
   if [[ "${SKIP_APPS_START_BEFORE_DEPLOY:-}" == "1" ]]; then
     echo "SKIP_APPS_START_BEFORE_DEPLOY=1: skipping databricks apps start; deploy may fail." >&2
     return 0
@@ -178,6 +193,30 @@ if ! ( run_sql_statement "GRANT SELECT ON TABLE ${ARANGO_GATEWAY_REGISTRY_TABLE}
   echo "NOTE: GRANT on ${ARANGO_GATEWAY_REGISTRY_TABLE} failed (create it by deploying arango-gateway-app once). MCP will resolve gateway URL after the table exists." >&2
 fi
 
+echo "Granting SELECT on agent URL registry (${ARANGO_AGENT_REGISTRY_TABLE}) to agent app SP..."
+if ! ( run_sql_statement "GRANT SELECT ON TABLE ${ARANGO_AGENT_REGISTRY_TABLE} TO \`${APP_SERVICE_PRINCIPAL_CLIENT_ID}\`" ); then
+  echo "NOTE: GRANT SELECT on ${ARANGO_AGENT_REGISTRY_TABLE} failed (table may not exist yet; deploy script will upsert below)." >&2
+fi
+
+echo "Publishing arango-agent app URL to Unity Catalog (${ARANGO_AGENT_REGISTRY_TABLE})..."
+_publish_agent_uc_ok=0
+if [[ -n "${PROFILE}" ]]; then
+  if ( "${SCRIPT_DIR}/update_arango_agent_registry_uc.sh" \
+    "${APP_URL}" "${APP_NAME}" "${ARANGO_AGENT_REGISTRY_TABLE}" "${WAREHOUSE_ID}" "${PROFILE}" \
+    "${APP_SERVICE_PRINCIPAL_CLIENT_ID}" ); then
+    _publish_agent_uc_ok=1
+  fi
+else
+  if ( "${SCRIPT_DIR}/update_arango_agent_registry_uc.sh" \
+    "${APP_URL}" "${APP_NAME}" "${ARANGO_AGENT_REGISTRY_TABLE}" "${WAREHOUSE_ID}" "" \
+    "${APP_SERVICE_PRINCIPAL_CLIENT_ID}" ); then
+    _publish_agent_uc_ok=1
+  fi
+fi
+if [[ "${_publish_agent_uc_ok}" -ne 1 ]]; then
+  echo "NOTE: Agent URL UC publish failed (often permissions or concurrent app startup). Restart arango-agent once, then re-run ./deploy_app.sh or run update_arango_agent_registry_uc.sh manually." >&2
+fi
+
 resolve_genie_registry_deploy_grantee() {
   local name="" json=""
   if [[ -n "${GENIE_REGISTRY_DEPLOY_GRANTEE:-}" ]]; then
@@ -265,6 +304,7 @@ fi
 echo
 echo "DATABRICKS_APP_URL=${APP_URL}"
 echo "# Gateway URL is read from UC (${ARANGO_GATEWAY_REGISTRY_TABLE}) unless ARANGO_GATEWAY_BASE_URL is set."
+echo "# Agent URL is read from UC (${ARANGO_AGENT_REGISTRY_TABLE}) unless ARANGO_AGENT_BASE_URL is set on consumers (e.g. dashboard)."
 echo "registry table (read): ${REGISTRY_TABLE}"
 echo "warehouse id: ${WAREHOUSE_ID}"
 echo "NOTE: unused deploy placeholders kept for parity with arango-dashboard-app/deploy_app.sh: LOCAL_ARANGO_URL=${LOCAL_ARANGO_URL} CLUSTER_NAME=${CLUSTER_NAME}"

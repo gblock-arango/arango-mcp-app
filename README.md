@@ -15,7 +15,11 @@ The Databricks MCP server, **gateway-backed Arango access**, and Databricks App 
 
 **Gateway mode:** optional `ARANGO_GATEWAY_BASE_URL`; otherwise resolve the active URL from `ARANGO_GATEWAY_REGISTRY_TABLE` using `DATABRICKS_SQL_WAREHOUSE_ID` (same pattern as `arango-dashboard-app`). `ARANGO_GATEWAY_BEARER_TOKEN` is optional. **Deploy / UC grants:** run `./deploy_app.sh` from this directory (includes Genie registry table + app SP grants when `GENIE_SPACE_REGISTRY_TABLE` is set).
 
-**Genie (UC registry / shell provision, not the app SP):** from this repo root, `./update_genie_registry_uc.sh` or `PYTHONPATH=src python src/provision_genie_uc.py` — see script headers. The Databricks App runs Genie HTTP (`gunicorn wsgi:app`); startup and `POST /api/deploy/reconcile-genie` live in this codebase.
+**Genie (UC registry / shell provision, not the app SP):** from this repo root, `./update_genie_registry_uc.sh` or `PYTHONPATH=src python src/provision_genie_uc.py` — see script headers. **`./update_arango_agent_registry_uc.sh`** publishes this app’s URL to **`ARANGO_AGENT_REGISTRY_TABLE`** (same idea as the gateway’s UC script). The Databricks App also upserts that table on startup when **`ARANGO_AGENT_REGISTRY_AUTO_CREATE=true`**.
+
+**HTTP entry (Databricks App):** `gunicorn asgi:app -k uvicorn.workers.UvicornWorker` (see `app.yaml`). This serves **stateless Streamable HTTP MCP** at **`https://<app-host>/mcp`** for **Genie Code** (Agent mode) plus the existing Flask routes (`/api/...`, `/health`). Pure Flask (no MCP HTTP) remains available as `gunicorn wsgi:app` for local debugging.
+
+**Genie Code + custom MCP:** In the workspace, open **Genie Code** → **Agent mode** → add a **Custom MCP server** and select this deployed app. Databricks requires the MCP endpoint at **`/mcp`** and a **stateless** HTTP MCP server (this app matches that contract). If the browser reports CORS errors, set **`MCP_CORS_ALLOW_ORIGINS`** on the app to your workspace origin (for example `https://<workspace-host>.cloud.databricks.com`), comma-separated if you need several. Official reference: [Connect Genie Code to MCP servers](https://docs.databricks.com/aws/en/genie-code/mcp).
 
 ---
 
@@ -113,6 +117,7 @@ Optional `ARANGO_GATEWAY_BASE_URL`; otherwise the active row in `ARANGO_GATEWAY_
 | `ARANGO_GATEWAY_REGISTRY_TABLE` | Optional | Defaults to `workspace.default.arango_gateway_registry` |
 | `ARANGO_REGISTRY_TABLE` | Optional | Defaults to `workspace.default.arango_connection_registry` (deploy grants / future reads) |
 | `ARANGO_GATEWAY_BEARER_TOKEN` | Rare | Only if gateway ingress requires Bearer |
+| `MCP_CORS_ALLOW_ORIGINS` | Optional | Comma-separated origins for CORS on `/mcp` (Genie Code). Example: `https://my-workspace.cloud.databricks.com`. Use `*` for permissive dev (no credentials). Empty disables CORS middleware. |
 
 All tools accept an optional `database_name` parameter to override the default.
 
@@ -282,6 +287,8 @@ arango-agent/   (this repository — MCP server at root)
 ├── app.yaml
 ├── databricks.yml
 ├── deploy_app.sh
+├── update_genie_registry_uc.sh
+├── update_arango_agent_registry_uc.sh
 ├── requirements.txt
 ├── pyproject.toml
 ├── resources/
@@ -313,7 +320,7 @@ The codebase follows a two-layer pattern:
 
 - **MCP Tools** (`src/arango_mcp/mcp_tools/`) — thin FastMCP-decorated functions that validate inputs and delegate to agents.
 - **Agents** (`src/arango_mcp/agents/`) — business logic classes inheriting from `ArangoAgentBase` (direct `python-arango` or gateway HTTP).
-- **Databricks App** (`src/arango_agent/`) — Flask HTTP (Genie), UC registry helpers, gateway URL resolution; separate from MCP tool modules so additional MCP packages can coexist.
+- **Databricks App** (`src/arango_agent/`) — Flask HTTP (Genie), UC helpers (gateway + **agent** URL registries, Genie), gateway URL resolution; separate from MCP tool modules so additional MCP packages can coexist.
 
 ---
 

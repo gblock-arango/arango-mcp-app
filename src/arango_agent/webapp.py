@@ -9,6 +9,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from arango_mcp.config import flask_app_config, settings
 from arango_agent.routes.api import api_blueprint
+from arango_agent.services.agent_url_registry import publish_self_agent_url_to_uc_if_configured
 from arango_agent.services.genie_registry import bootstrap_genie_space_id_from_uc
 from arango_agent.services.startup_debug_genie import run_genie_startup_debug
 
@@ -18,6 +19,8 @@ logger = logging.getLogger(__name__)
 def create_app() -> Flask:
     app = Flask(__name__)
     app.config.from_mapping(flask_app_config(settings))
+
+    publish_self_agent_url_to_uc_if_configured(app)
 
     try:
         bootstrap_genie_space_id_from_uc(app)

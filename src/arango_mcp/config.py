@@ -132,6 +132,7 @@ class ServerSettings(BaseSettings):
 
 
 _DEFAULT_GENIE_SPACE_REGISTRY_TABLE = "workspace.default.genie_space_registry"
+_DEFAULT_ARANGO_AGENT_REGISTRY_TABLE = "workspace.default.arango_agent_registry"
 
 
 class AppSettings(BaseSettings):
@@ -188,6 +189,21 @@ class AppSettings(BaseSettings):
         description="env: GENIE_MESSAGE_TIMEOUT_SECONDS",
     )
 
+    arango_agent_registry_table: str = Field(
+        default=_DEFAULT_ARANGO_AGENT_REGISTRY_TABLE,
+        description="UC Delta table where this app publishes its public base_url; env: ARANGO_AGENT_REGISTRY_TABLE",
+    )
+    arango_agent_registry_auto_create: bool = Field(
+        default=True,
+        description="When true, app startup upserts this app's URL into ARANGO_AGENT_REGISTRY_TABLE; env: ARANGO_AGENT_REGISTRY_AUTO_CREATE",
+    )
+
+    mcp_cors_allow_origins: str = Field(
+        default="",
+        description="Comma-separated ``Access-Control-Allow-Origin`` values for ``/mcp`` (Genie Code / browser). "
+        "Use ``*`` for dev (no credentials). Empty disables CORS middleware on MCP. env: MCP_CORS_ALLOW_ORIGINS",
+    )
+
     arango: ArangoDBSettings = Field(default_factory=ArangoDBSettings)
     gateway: GatewaySettings = Field(default_factory=GatewaySettings)
     server: ServerSettings = Field(default_factory=ServerSettings)
@@ -222,6 +238,9 @@ def flask_app_config(app: AppSettings | None = None) -> dict[str, Any]:
         "GENIE_SPACE_PARENT_PATH": s.genie_space_parent_path,
         "GENIE_PROVISION_LOCK_PATH": s.genie_provision_lock_path,
         "GENIE_MESSAGE_TIMEOUT_SECONDS": s.genie_message_timeout_seconds,
+        "ARANGO_AGENT_REGISTRY_TABLE": s.arango_agent_registry_table,
+        "ARANGO_AGENT_REGISTRY_AUTO_CREATE": s.arango_agent_registry_auto_create,
+        "MCP_CORS_ALLOW_ORIGINS": s.mcp_cors_allow_origins,
     }
 
 

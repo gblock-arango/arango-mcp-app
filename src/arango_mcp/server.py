@@ -1,4 +1,5 @@
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from arango_mcp.arango_connector import arango_db_lifespan
 from arango_mcp.config import settings
@@ -73,8 +74,18 @@ All operations accept an optional database_name parameter.
 - Use stream transactions for multi-document atomicity
 - Hot backup operations require Enterprise Edition
 """
-# Create the FastMCP application instance
-mcp_app = FastMCP(name=_server_name, instructions=_server_instructions, lifespan=arango_db_lifespan)
+# FastMCP instance: stdio (CLI) and HTTP MCP at ``/mcp`` when mounted in ``asgi.py``.
+# - ``streamable_http_path="/"``: mounted at ``/mcp`` on the host app → public URL ``…/mcp`` (Genie Code).
+# - ``stateless_http=True``: required for Databricks custom MCP Apps / Genie Code.
+# - ``transport_security``: disable Host/Origin pinning so the app works behind Databricks ingress.
+mcp_app = FastMCP(
+    name=_server_name,
+    instructions=_server_instructions,
+    lifespan=arango_db_lifespan,
+    stateless_http=True,
+    streamable_http_path="/",
+    transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
+)
 # Import tool and resource modules to register them
 # These imports MUST happen AFTER mcp_app is defined.
 from arango_mcp.mcp_tools import (  # noqa: F401, E402 — side-effect imports register MCP tools

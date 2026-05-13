@@ -1,23 +1,28 @@
 command:
   - "bash"
   - "-lc"
-  - "export PYTHONPATH=src && gunicorn wsgi:app --bind 0.0.0.0:${DATABRICKS_APP_PORT:-8000} --workers 2 --timeout 660"
+  - "export PYTHONPATH=src && gunicorn asgi:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${DATABRICKS_APP_PORT:-8000} --workers 2 --timeout 660"
 
-# ``DATABRICKS_SQL_WAREHOUSE_ID`` must be set for UC SQL (no default): export, ``app.yaml`` in your
-# deployment, or parent bundle (e.g. arango-platform-bundle ``sql_warehouse_id`` → apps config).
-# ``ARANGO_GATEWAY_BASE_URL`` is optional: when empty, the server reads the active URL from
-# ``ARANGO_GATEWAY_REGISTRY_TABLE`` (written by arango-gateway-app).
+# ``DATABRICKS_SQL_WAREHOUSE_ID``: set here for solo deploy, or from **arango-platform-bundle**
+# ``sql_warehouse_id`` (bundle ``resources/apps.yml`` overrides this on deploy). ``config.py``
+# does not supply a default.
 
 env:
   - name: DATABRICKS_SQL_WAREHOUSE_ID
     description: "SQL warehouse for UC reads + Genie registry; required when using SQL/UC from this app"
-    value: ""
+    value: "473d40703241ee4c"
   - name: ARANGO_GATEWAY_BASE_URL
     description: "Optional override for gateway URL (no trailing slash). When empty, resolved from UC"
     value: ""
   - name: ARANGO_GATEWAY_REGISTRY_TABLE
     description: "UC Delta table where arango-gateway-app publishes base_url (catalog.schema.table)"
     value: "workspace.default.arango_gateway_registry"
+  - name: ARANGO_AGENT_REGISTRY_TABLE
+    description: "UC Delta table where this app publishes its public base_url for consumers (e.g. dashboard)"
+    value: "workspace.default.arango_agent_registry"
+  - name: ARANGO_AGENT_REGISTRY_AUTO_CREATE
+    description: "When true, upsert this app's public URL into ARANGO_AGENT_REGISTRY_TABLE at startup"
+    value: "true"
   - name: ARANGO_REGISTRY_TABLE
     description: "UC connection registry (SELECT for deploy grants / parity with dashboard)"
     value: "workspace.default.arango_connection_registry"
@@ -59,6 +64,9 @@ env:
   - name: GENIE_USE_APP_RUNTIME_AUTH_FOR_SDK
     description: "When true (default), Genie in a Databricks App uses plain WorkspaceClient() (this app's injected OAuth client). Off-platform, with HOST+CLIENT_ID+SECRET set, Genie may strip those vars so DATABRICKS_TOKEN can be used. SQL/UC still uses default WorkspaceClient. Set false for local Genie tests that must force M2M."
     value: "true"
+  - name: MCP_CORS_ALLOW_ORIGINS
+    description: "Comma-separated origins for CORS on /mcp (Genie Code). Use your workspace origin (https://….cloud.databricks.com) or * for dev (no credentials). Empty disables CORS middleware."
+    value: ""
 
 resources:
   - name: sql-warehouse
