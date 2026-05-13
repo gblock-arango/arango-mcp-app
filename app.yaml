@@ -1,0 +1,30 @@
+command:
+  - "bash"
+  - "-lc"
+  - "export PYTHONPATH=src && exec python app.py"
+
+# Literal defaults mirror ``databricks.yml`` so ``./deploy_app.sh`` works without substitution.
+# ``ARANGO_GATEWAY_BASE_URL`` is optional: when empty, the server reads the active URL from
+# ``ARANGO_GATEWAY_REGISTRY_TABLE`` (written by arango-gateway-app), same as arango-dashboard-app.
+
+env:
+  - name: DATABRICKS_SQL_WAREHOUSE_ID
+    description: "SQL warehouse for UC reads (gateway URL registry)"
+    value: "473d40703241ee4c"
+  - name: ARANGO_GATEWAY_BASE_URL
+    description: "Optional override for gateway URL (no trailing slash). When empty, resolved from UC"
+    value: ""
+  - name: ARANGO_GATEWAY_REGISTRY_TABLE
+    description: "UC Delta table where arango-gateway-app publishes base_url (catalog.schema.table)"
+    value: "workspace.default.arango_gateway_registry"
+  - name: ARANGO_REGISTRY_TABLE
+    description: "UC connection registry (SELECT for parity with dashboard; MCP uses gateway for Arango I/O)"
+    value: "workspace.default.arango_connection_registry"
+  - name: ARANGO_DEFAULT_DB_NAME
+    value: "_system"
+
+resources:
+  - name: sql-warehouse
+    sql_warehouse:
+      id: ${DATABRICKS_SQL_WAREHOUSE_ID}
+      permission: CAN_USE

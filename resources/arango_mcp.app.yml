@@ -1,0 +1,6 @@
+resources:
+  apps:
+    arango_mcp:
+      name: arango-mcp-${bundle.target}
+      description: "Arango MCP server (Databricks App; UC gateway URL like dashboard)"
+      source_code_path: .

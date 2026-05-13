@@ -1,0 +1,76 @@
+[tool.poetry]
+name = "arangodb-mcp-server"
+version = "2.0.0"
+description = "ArangoDB MCP Server - Document, Graph, Search, Sharding & Cluster Operations"
+authors = ["ArangoDB GmbH <info@arangodb.com>"]
+readme = "README.md"
+package-mode = true
+
+packages = [{ include = "arango_mcp", from = "src" }]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+python-arango = "^8.1.0"
+mcp = "^1.0.0"
+fastmcp = "^0.2.0"
+pydantic = "^2.0.0"
+pydantic-settings = "^2.0.0"
+anyio = "^4.5.0"
+databricks-sdk = "^0.36.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+pytest-asyncio = "^0.24.0"
+pytest-timeout = "^2.2.0"
+black = "^24.0.0"
+isort = "^5.13.0"
+mypy = "^1.0.0"
+ruff = "^0.8.0"
+pytest-cov = "^5.0.0"
+
+[tool.poetry.scripts]
+arangodb-mcp = "arango_mcp.main:run_server_cli"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+ignore = [
+    "B008",   # function-call-in-default-argument — standard Pydantic Field() pattern
+    "E402",   # module-import-not-at-top-of-file — side-effect imports in server.py/conftest
+    "E501",   # line-too-long — enforced by formatter, not linter
+    "UP006",  # non-pep585-annotation — project uses typing.Dict/List
+    "UP007",  # non-pep604-annotation — project uses Optional[X]
+    "UP035",  # deprecated-import — project uses typing imports
+    "W293",   # whitespace-before-comment — in multiline Field descriptions
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+markers = [
+    "cluster: tests requiring a cluster deployment (deselect with '-m not cluster')",
+    "slow: tests that take a long time to run",
+]
+timeout = 120
+timeout_func_only = true

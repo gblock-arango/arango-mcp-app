@@ -1,0 +1,9 @@
+# Databricks Apps: pip installs from this file when deploying the app.
+# See https://docs.databricks.com/aws/en/dev-tools/databricks-apps/dependencies
+databricks-sdk>=0.36.0
+python-arango>=8.1.0
+mcp>=1.0.0
+fastmcp>=0.2.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+anyio>=4.5.0
