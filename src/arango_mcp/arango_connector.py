@@ -36,17 +36,24 @@ class ArangoDBConnector:
         """Set when a gateway URL is resolved (env or UC); use ``.request(...)`` for REST."""
         return self._gateway_client
 
-    async def connect(self) -> None:
+    async def connect(
+        self,
+        *,
+        gateway_auth_config: dict | None = None,
+        outbound_bearer: str | None = None,
+    ) -> None:
         """Establish connection (gateway HTTP or direct python-arango)."""
-        effective_gw = effective_gateway_base_url(
-            gateway_resolution_config(settings)
-        ).strip()
+        cfg = gateway_auth_config if gateway_auth_config is not None else gateway_resolution_config(settings)
+        effective_gw = effective_gateway_base_url(cfg).strip()
 
         if effective_gw:
             self._use_gateway = True
+            auth_cfg = dict(cfg) if isinstance(cfg, dict) else gateway_resolution_config(settings)
             self._gateway_client = GatewayArangoClient(
                 settings.gateway,
                 effective_base_url=effective_gw,
+                outbound_bearer=outbound_bearer,
+                auth_config=auth_cfg,
             )
             self._gateway_client.connect()
             self._gateway_databases = {}

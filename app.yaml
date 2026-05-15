@@ -100,8 +100,14 @@ env:
     description: "Optional separate serving endpoint name for ToolRouter; when set, wins over GENIEMCP_SERVING_ENDPOINT for MCP chat."
     value: ""
   - name: GENIEMCP_MAX_TOOLS
-    description: "Max MCP tools registered with the model per request (cap ~20 like Genie Code)"
+    description: >-
+      Max tools exposed on Genie Code /mcp from genie_code_manifest.json (workspace ~20-tool cap).
     value: "20"
+  - name: GENIEMCP_MODEL_MAX_TOOLS
+    description: >-
+      Max tools sent to the Llama/serving chat API per MCP orchestrator request (Databricks hard cap 32).
+      All tools stay registered on /mcp/internal; only the model's tool list is trimmed per turn.
+    value: "32"
   - name: GENIEMCP_MAX_ROUNDS
     description: "Max model↔tool rounds per GenieMCP request"
     value: "8"
@@ -132,4 +138,9 @@ resources:
   - name: sql-warehouse
     sql_warehouse:
       id: ${DATABRICKS_SQL_WAREHOUSE_ID}
+      permission: CAN_USE
+  # MCP + Genie tools call arango-gateway-app (``POST /api/arango/http``, ``/api/arango/chat``).
+  - name: arango-gateway-app-invoke
+    app:
+      name: arango-gateway-app
       permission: CAN_USE

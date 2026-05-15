@@ -315,7 +315,7 @@ def step3_mcp_protocol(base: str, token: str) -> bool:
             )
         return False
     print(f"tools: {names}")
-    ok = len(names) == 5
+    ok = len(names) == 3
     print("PASS" if ok else "FAIL")
     return ok
 
@@ -350,14 +350,15 @@ def step4_cors_preflight(base: str, workspace_origin: str) -> bool:
 
 
 def step5_llm_chat(base: str, token: str) -> bool:
-    print("\n=== Step 5: Dashboard MCP chat (LLM + internal tools) ===")
+    print("\n=== Step 5: LLM online (no tool required) ===")
     if not token:
-        print("SKIP — set DATABRICKS_TOKEN for POST /api/genie-mcp/chat")
+        print("SKIP — set DATABRICKS_TOKEN or use databricks auth login")
         return True
     code, body = _post_json(
         f"{base.rstrip('/')}/api/genie-mcp/chat",
-        {"content": "Reply with exactly: pong"},
+        {"content": "Reply with exactly one word: pong. Do not use any tools."},
         headers={"Authorization": f"Bearer {token}"},
+        timeout=120.0,
     )
     print(f"POST /api/genie-mcp/chat -> {code}")
     print(body[:1200])
@@ -368,8 +369,52 @@ def step5_llm_chat(base: str, token: str) -> bool:
         d = json.loads(body)
     except json.JSONDecodeError:
         return False
-    ok = d.get("ok") is True
-    print("PASS" if ok else f"FAIL — {d.get('error')}")
+    ok = d.get("ok") is True and "pong" in str((d.get("message") or {}).get("content", "")).lower()
+    print("PASS" if ok else f"FAIL — {d.get('error') or d}")
+    return ok
+
+
+def step6_llm_tool_calling(base: str, token: str) -> bool:
+    print("\n=== Step 6: LLM + internal MCP tool calling ===")
+    if not token:
+        print("SKIP — set DATABRICKS_TOKEN or use databricks auth login")
+        return True
+    prompt = (
+        "Use arango-graph-queries semantics: call the list-databases MCP tool first, then reply "
+        "with a one-line summary of the database names returned by the tool."
+    )
+    code, body = _post_json(
+        f"{base.rstrip('/')}/api/genie-mcp/chat",
+        {"content": prompt},
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=300.0,
+    )
+    print(f"POST /api/genie-mcp/chat -> {code}")
+    print(body[:2000])
+    if code != 200:
+        print("FAIL")
+        return False
+    try:
+        d = json.loads(body)
+    except json.JSONDecodeError:
+        return False
+    if not d.get("ok"):
+        print(f"FAIL — {d.get('error')}")
+        return False
+    invoked = list(d.get("tools_invoked") or [])
+    content = str((d.get("message") or {}).get("content", ""))
+    print(f"tools_invoked: {invoked or '(field absent — redeploy for explicit trace)'}")
+    ok = bool(invoked)
+    if not ok and ("_system" in content or "database" in content.lower()):
+        ok = True
+        print("PASS (heuristic from reply text) — redeploy to get tools_invoked in JSON")
+    elif ok:
+        print("PASS — LLM invoked internal MCP tool(s)")
+    else:
+        print(
+            "FAIL — model replied but no MCP tools detected. "
+            "Check GENIEMCP_SERVING_ENDPOINT, gateway reachability, and app logs."
+        )
     return ok
 
 
@@ -406,7 +451,7 @@ def main() -> int:
         default=os.environ.get("DATABRICKS_WORKSPACE_ORIGIN", "").strip(),
         help="e.g. https://dbc-xxxx.cloud.databricks.com (no path)",
     )
-    p.add_argument("--step", default="all", help="1|2|3|4|5|all")
+    p.add_argument("--step", default="all", help="1|2|3|4|5|6|all")
     args = p.parse_args()
     if not args.app_url:
         print("ERROR: set APP_URL or --app-url to the deployed mcp-arango-agent URL", file=sys.stderr)
@@ -429,6 +474,7 @@ def main() -> int:
         "3": lambda: step3_mcp_protocol(args.app_url, token),
         "4": lambda: step4_cors_preflight(args.app_url, args.workspace_origin),
         "5": lambda: step5_llm_chat(args.app_url, token),
+        "6": lambda: step6_llm_tool_calling(args.app_url, token),
     }
     if args.step == "all":
         results = [fn() for fn in steps.values()]

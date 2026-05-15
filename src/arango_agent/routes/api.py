@@ -14,6 +14,7 @@ from arango_agent.services.gateway_url_registry import (
 )
 from arango_agent.services.arango_conversation import ask_arango_conversation
 from arango_agent.services.genie_conversation import ask_genie_conversation
+from arango_agent.services.databricks_app_http_auth import flask_config_with_inbound_bearer
 from arango_agent.services.genie_mcp_orchestrator import ask_genie_mcp_conversation_sync
 from arango_agent.services.genie_registry import (
     invalidate_genie_space_after_acl_error,
@@ -39,13 +40,15 @@ def mcp_diagnostics():
     try:
         from arango_mcp.genie_code_mcp import mcp_genie_code_app
         from arango_mcp.server import mcp_app as mcp_full_app
-        from arango_mcp.tool_registries import load_manifest
+        from arango_mcp.tool_registries import genie_code_allowed_tool_names, load_manifest
 
         def tool_names(app: Any) -> list[str]:
             return [str(t.name) for t in app._tool_manager.list_tools()]
 
         genie_names = tool_names(mcp_genie_code_app)
         full_names = tool_names(mcp_full_app)
+        max_genie_tools = int(current_app.config.get("GENIEMCP_MAX_TOOLS") or 20)
+        genie_allowed = genie_code_allowed_tool_names(max_tools=max_genie_tools)
         return jsonify(
             {
                 "ok": True,
@@ -53,6 +56,8 @@ def mcp_diagnostics():
                     "http_path": "/mcp",
                     "tool_count": len(genie_names),
                     "tool_names": genie_names,
+                    "geniemcp_max_tools": max_genie_tools,
+                    "manifest_allowed_tool_names": genie_allowed,
                     "manifest": load_manifest("genie_code"),
                 },
                 "internal_full_catalog_mcp": {
@@ -128,8 +133,9 @@ def genie_chat():
 @api_blueprint.post("/arango/chat")
 def arango_chat():
     """
-    Dashboard **ADA** mode: same JSON body as ``/api/genie/chat``.
-    Forwards to ``ARANGO_CONVERSATION_URL`` when set; otherwise stub. Genie Code in the workspace UI still uses ``/mcp`` separately.
+    Direct **ADA** API on the agent (optional). The **dashboard** ADA selector proxies to
+    **arango-gateway-app** ``/api/arango/chat`` instead. Genie Code ADA uses gateway via
+    ``arango-ada-conversation`` on ``/mcp``.
     """
     payload = request.get_json(silent=True) or {}
     content = str(
@@ -169,11 +175,15 @@ def genie_mcp_chat():
     if conversation_id is not None:
         conversation_id = str(conversation_id).strip() or None
 
-    result = ask_genie_mcp_conversation_sync(
-        content=content,
-        conversation_id=conversation_id,
-        config=current_app.config,
-    )
+    try:
+        result = ask_genie_mcp_conversation_sync(
+            content=content,
+            conversation_id=conversation_id,
+            config=flask_config_with_inbound_bearer(current_app.config),
+        )
+    except Exception as exc:
+        logger.exception("genie-mcp/chat failed")
+        return jsonify({"ok": False, "error": str(exc)}), 500
     status = 200 if result.get("ok") else 502
     return jsonify(result), status
 

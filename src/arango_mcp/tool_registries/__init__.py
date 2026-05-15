@@ -16,3 +16,11 @@ def load_manifest(stem: str) -> dict[str, Any]:
     with open(manifest_path(stem), encoding="utf-8") as f:
         data: dict[str, Any] = json.load(f)
     return data
+
+
+def genie_code_allowed_tool_names(*, max_tools: int = 20) -> list[str]:
+    """Tool names from ``genie_code_manifest.json``, capped for Genie Code ``/mcp`` only."""
+    manifest = load_manifest("genie_code")
+    names = [str(n) for n in (manifest.get("tool_names") or [])]
+    cap = max(1, min(int(max_tools), 40))
+    return names[:cap]

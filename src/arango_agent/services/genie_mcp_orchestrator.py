@@ -12,6 +12,7 @@ Requires ``openai``, ``TOOL_ROUTER_SERVING_ENDPOINT`` or ``GENIEMCP_SERVING_ENDP
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import uuid
@@ -20,11 +21,15 @@ from typing import Any, Mapping
 import anyio
 from openai import OpenAI
 
+from arango_agent.services.async_bridge import run_on_main_loop
 from arango_agent.services.genie_workspace_client import agent_workspace_client
 from arango_mcp.arango_connector import arango_connector
 from arango_mcp.server import mcp_app
 
 logger = logging.getLogger(__name__)
+
+# Databricks foundation-model ``chat.completions`` (e.g. Meta Llama 3.3) rejects >32 tools.
+SERVING_API_TOOLS_HARD_CAP = 32
 
 _SYSTEM = (
     "You are an expert assistant with access to ArangoDB MCP tools. "
@@ -53,22 +58,89 @@ def _workspace_openai_client() -> OpenAI:
     return OpenAI(api_key=token, base_url=f"{host}/serving-endpoints")
 
 
-def _tools_for_openai(max_tools: int) -> list[dict[str, Any]]:
-    raw = mcp_app._tool_manager.list_tools()[:max_tools]
-    tools: list[dict[str, Any]] = []
-    for t in raw:
+def _sanitize_tool_parameters_for_serving(schema: Any) -> dict[str, Any]:
+    """
+    Databricks foundation-model chat requires JSON Schema with ``additionalProperties: false``
+    (or omitted). Pydantic/FastMCP often emits ``additionalProperties: true`` on open dicts.
+    """
+    if not isinstance(schema, dict):
+        return {"type": "object", "properties": {}, "additionalProperties": False}
+
+    out = copy.deepcopy(schema)
+
+    def _walk(node: Any) -> None:
+        if isinstance(node, dict):
+            if "additionalProperties" in node and node["additionalProperties"] is not False:
+                node["additionalProperties"] = False
+            for value in node.values():
+                _walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                _walk(item)
+
+    _walk(out)
+    if out.get("type") == "object" and "additionalProperties" not in out:
+        out["additionalProperties"] = False
+    return out
+
+
+def _prioritize_tools_for_model(
+    raw: list[Any],
+    *,
+    user_text: str,
+    cap: int,
+) -> list[Any]:
+    """Choose up to ``cap`` tools from the full catalog (model API limit, not MCP registration)."""
+    if len(raw) <= cap:
+        return raw
+    words = [w.lower() for w in user_text.split() if len(w) > 2]
+    read_prefixes = ("list-", "get-", "execute-aql", "read-", "describe-", "show-")
+
+    def _score(tool: Any) -> int:
+        name = str(getattr(tool, "name", "") or "").lower()
+        desc = str(getattr(tool, "description", "") or "").lower()[:800]
+        score = 0
+        for w in words:
+            if w in name:
+                score += 12
+            if w in desc:
+                score += 3
+        if any(name.startswith(p) for p in read_prefixes):
+            score += 2
+        return score
+
+    ranked = sorted(raw, key=_score, reverse=True)
+    return ranked[:cap]
+
+
+def _tools_for_openai(*, max_tools: int, user_text: str = "") -> list[dict[str, Any]]:
+    """Subset of ``mcp_app`` tools for one serving-endpoint request (full catalog still callable)."""
+    cap = max(1, min(int(max_tools), SERVING_API_TOOLS_HARD_CAP))
+    all_tools = list(mcp_app._tool_manager.list_tools())
+    selected = _prioritize_tools_for_model(all_tools, user_text=user_text, cap=cap)
+    if len(all_tools) > cap:
+        logger.info(
+            "MCP orchestrator: offering %s of %s tools to model (API cap %s); full catalog on /mcp/internal",
+            len(selected),
+            len(all_tools),
+            SERVING_API_TOOLS_HARD_CAP,
+        )
+    out: list[dict[str, Any]] = []
+    for t in selected:
         desc = (t.description or t.name)[:4000]
-        tools.append(
+        out.append(
             {
                 "type": "function",
                 "function": {
                     "name": t.name,
                     "description": desc,
-                    "parameters": t.parameters or {"type": "object", "properties": {}},
+                    "parameters": _sanitize_tool_parameters_for_serving(
+                        t.parameters or {"type": "object", "properties": {}}
+                    ),
                 },
             }
         )
-    return tools
+    return out
 
 
 def _tool_result_text(result: Any) -> str:
@@ -135,13 +207,21 @@ async def ask_genie_mcp_conversation(
             ),
         }
 
-    max_tools = int(config.get("GENIEMCP_MAX_TOOLS") or 20)
     max_rounds = int(config.get("GENIEMCP_MAX_ROUNDS") or 8)
-    max_tools = max(1, min(max_tools, 40))
     max_rounds = max(1, min(max_rounds, 24))
 
+    outbound = str(config.get("OUTBOUND_BEARER_TOKEN") or "").strip() or None
+    gw_cfg = {
+        "ARANGO_GATEWAY_BASE_URL": str(config.get("ARANGO_GATEWAY_BASE_URL") or ""),
+        "ARANGO_GATEWAY_REGISTRY_TABLE": str(config.get("ARANGO_GATEWAY_REGISTRY_TABLE") or ""),
+        "DATABRICKS_SQL_WAREHOUSE_ID": str(config.get("DATABRICKS_SQL_WAREHOUSE_ID") or ""),
+        "OUTBOUND_BEARER_TOKEN": outbound or "",
+    }
     try:
-        await arango_connector.connect()
+        await arango_connector.connect(
+            gateway_auth_config=gw_cfg,
+            outbound_bearer=outbound,
+        )
     except Exception as exc:
         logger.warning("MCP mode: Arango connector connect failed: %s", exc)
         return {"ok": False, "error": f"Arango/gateway not reachable for MCP tools: {exc}"}
@@ -151,9 +231,15 @@ async def ask_genie_mcp_conversation(
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
 
-    tools = _tools_for_openai(max_tools)
+    model_max_tools = int(
+        config.get("GENIEMCP_MODEL_MAX_TOOLS")
+        or config.get("GENIEMCP_MAX_TOOLS")
+        or SERVING_API_TOOLS_HARD_CAP
+    )
+    tools = _tools_for_openai(max_tools=model_max_tools, user_text=text)
     if not tools:
         return {"ok": False, "error": "No MCP tools are registered on this server."}
+    tools_registered = len(mcp_app._tool_manager.list_tools())
 
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": _SYSTEM},
@@ -162,6 +248,7 @@ async def ask_genie_mcp_conversation(
 
     cid = (conversation_id or "").strip() or str(uuid.uuid4())
     rounds = 0
+    tools_invoked: list[str] = []
 
     def _chat_once() -> Any:
         return client.chat.completions.create(
@@ -189,6 +276,10 @@ async def ask_genie_mcp_conversation(
                 "conversation_id": cid,
                 "message_id": str(getattr(resp, "id", "") or "") or None,
                 "message": {"content": out, "status": "SUCCEEDED"},
+                "tools_invoked": tools_invoked,
+                "model_rounds": rounds,
+                "tools_offered_to_model": len(tools),
+                "tools_registered": tools_registered,
             }
 
         assistant_msg: dict[str, Any] = {
@@ -210,6 +301,7 @@ async def ask_genie_mcp_conversation(
 
         for tc in tool_calls:
             name = tc.function.name
+            tools_invoked.append(name)
             raw_args = tc.function.arguments or "{}"
             try:
                 args = json.loads(raw_args) if isinstance(raw_args, str) else dict(raw_args)
@@ -233,6 +325,8 @@ async def ask_genie_mcp_conversation(
     return {
         "ok": False,
         "error": f"MCP mode exceeded maximum tool rounds ({max_rounds}).",
+        "tools_invoked": tools_invoked,
+        "model_rounds": rounds,
     }
 
 
@@ -243,9 +337,16 @@ def ask_genie_mcp_conversation_sync(
     config: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Run :func:`ask_genie_mcp_conversation` from sync Flask (Gunicorn worker)."""
-    return anyio.run(
-        ask_genie_mcp_conversation,
-        content=content,
-        conversation_id=conversation_id,
-        config=config,
-    )
+    timeout = float(config.get("GENIEMCP_SYNC_TIMEOUT_SECONDS") or 660.0)
+    try:
+        return run_on_main_loop(
+            ask_genie_mcp_conversation(
+                content=content,
+                conversation_id=conversation_id,
+                config=config,
+            ),
+            timeout=timeout,
+        )
+    except Exception as exc:
+        logger.exception("MCP orchestration failed in sync bridge")
+        return {"ok": False, "error": f"MCP orchestration failed: {exc}"}

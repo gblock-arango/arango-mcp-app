@@ -1,4 +1,9 @@
-"""Five coarse MCP tools for Genie Code (``/mcp``). Full catalog lives on ``/mcp/internal``."""
+"""Three Genie Code MCP tools at ``/mcp`` (≤ Databricks 20-tool workspace cap).
+
+- ``arango-graph-machine-learning`` — GraphML stub (future Gold-table graphlets → job).
+- ``arango-ada-conversation`` — AMP ADA via **arango-gateway-app** ``/api/arango/chat``.
+- ``arango-graph-queries`` — workspace LLM + full internal MCP catalog (``genie_mcp_orchestrator``).
+"""
 
 from __future__ import annotations
 
@@ -9,10 +14,9 @@ from typing import Any
 import anyio
 from pydantic import Field
 
-from arango_agent.services.arango_conversation import ask_arango_conversation
-from arango_agent.services.genie_conversation import ask_genie_conversation
-from arango_agent.services.genie_registry import resolve_genie_space_id_for_app
-from arango_agent.services.genie_workspace_client import agent_workspace_client
+from arango_agent.services.databricks_app_http_auth import config_with_inbound_bearer
+from arango_agent.services.gateway_ada_conversation import ask_gateway_ada_conversation
+from arango_agent.services.genie_mcp_orchestrator import ask_genie_mcp_conversation
 from arango_mcp.config import flask_app_config, settings
 from arango_mcp.genie_code_mcp import mcp_genie_code_app
 
@@ -20,36 +24,19 @@ logger = logging.getLogger(__name__)
 
 
 def _agent_config() -> dict[str, Any]:
-    return flask_app_config(settings)
+    """Flask/MCP inbound bearer → ``OUTBOUND_BEARER_TOKEN`` for gateway app→app calls."""
+    return config_with_inbound_bearer(flask_app_config(settings))
 
 
-async def _genie_space_call(*, content: str, conversation_id: str | None) -> dict[str, Any]:
-    cfg = _agent_config()
-    space_id = resolve_genie_space_id_for_app(cfg).strip()
-    if not space_id:
-        return {
-            "ok": False,
-            "error": "Genie space id is not configured (GENIE_SPACE_ID or UC registry + warehouse).",
-        }
-    timeout = float(cfg.get("GENIE_MESSAGE_TIMEOUT_SECONDS") or 600.0)
-
-    def _call() -> dict[str, Any]:
-        return ask_genie_conversation(
-            workspace_client=agent_workspace_client(),
-            space_id=space_id,
-            content=content,
-            conversation_id=conversation_id,
-            timeout_seconds=timeout,
-        )
-
-    return await anyio.to_thread.run_sync(_call)
+def _json(out: dict[str, Any]) -> str:
+    return json.dumps(out, default=str)
 
 
-async def _ada_call(*, content: str, conversation_id: str | None) -> dict[str, Any]:
+async def _gateway_ada_call(*, content: str, conversation_id: str | None) -> dict[str, Any]:
     cfg = _agent_config()
 
     def _call() -> dict[str, Any]:
-        return ask_arango_conversation(
+        return ask_gateway_ada_conversation(
             content=content,
             conversation_id=conversation_id,
             config=cfg,
@@ -59,102 +46,88 @@ async def _ada_call(*, content: str, conversation_id: str | None) -> dict[str, A
 
 
 @mcp_genie_code_app.tool(
-    name="genie-space-conversation",
+    name="arango-graph-machine-learning",
     description=(
-        "Ask the configured Databricks **Genie Space** (AI/BI) a question in natural language. "
-        "Returns Genie's answer and conversation_id for follow-ups. Use for UC/SQL/BI context, "
-        "not for raw Arango AQL."
+        "Run (future) **GraphML** training or inference on graphlets from one or more **Gold** UC table "
+        "rows. **Stub today** — records inputs until the gateway GraphML job is wired. "
+        "Not for ad-hoc AQL; use ``arango-graph-queries``."
     ),
 )
-async def genie_space_conversation(
-    content: str = Field(..., description="User question for the Genie Space."),
-    conversation_id: str | None = Field(
-        default=None,
-        description="Optional prior conversation_id to continue a thread.",
+async def arango_graph_machine_learning(
+    gold_table_rows: str = Field(
+        ...,
+        description=(
+            "JSON array of Gold table row references (graphlets), e.g. "
+            '[{"catalog":"c","schema":"s","table":"t","row_id":"…"}].'
+        ),
     ),
-) -> str:
-    out = await _genie_space_call(content=content.strip(), conversation_id=conversation_id)
-    return json.dumps(out, default=str)
-
-
-@mcp_genie_code_app.tool(
-    name="ada-conversation",
-    description=(
-        "Cluster **ADA** (or forwarded) natural-language conversation when "
-        "``ARANGO_CONVERSATION_URL`` is set on the agent app; otherwise returns a stub error. "
-        "Use for Arango-cluster ADA, not Genie Space."
-    ),
-)
-async def ada_conversation(
-    content: str = Field(..., description="User message for ADA."),
-    conversation_id: str | None = Field(default=None, description="Optional thread id."),
-) -> str:
-    out = await _ada_call(content=content.strip(), conversation_id=conversation_id)
-    return json.dumps(out, default=str)
-
-
-@mcp_genie_code_app.tool(
-    name="create-arango-graph",
-    description=(
-        "**Stub (phase 1):** UC / corpus graph creation will be wired to arango-gateway-app "
-        "pipelines. For now returns guidance; use ``/mcp/internal`` Arango tools for direct graph "
-        "DDL in ArangoDB."
-    ),
-)
-async def create_arango_graph(
-    spec: str = Field(
+    options: str = Field(
         default="{}",
-        description="JSON string: target scope, tables, options (ignored in stub).",
+        description="Optional JSON object: model, hyperparameters, output volume path, etc.",
     ),
 ) -> str:
-    logger.info("create-arango-graph (stub) spec_len=%s", len(spec or ""))
-    return json.dumps(
+    logger.info(
+        "arango-graph-machine-learning (stub) rows_len=%s options_len=%s",
+        len(gold_table_rows or ""),
+        len(options or ""),
+    )
+    return _json(
         {
             "ok": False,
             "phase": "stub",
             "detail": (
-                "Not implemented yet. Use internal MCP at …/mcp/internal for Arango graph tools "
-                "or gateway /api/databricks-graph/* from automation."
+                "GraphML job not implemented yet. Will consume Gold-table graphlet rows and run an "
+                "AMP GraphML pipeline via arango-gateway-app when available."
             ),
+            "docs": "https://docs.arango.ai/amp/",
+            "gold_table_rows_received": (gold_table_rows or "")[:4000],
+            "options_received": (options or "")[:2000],
         }
     )
 
 
 @mcp_genie_code_app.tool(
-    name="search-arango-graph",
+    name="arango-ada-conversation",
     description=(
-        "**Stub (phase 1):** Search / traverse over Arango-backed graphs. "
-        "Will delegate to gateway or internal MCP. Use ``execute-aql-query`` on ``/mcp/internal`` for now."
+        "Natural-language chat with **Arango Managed Platform ADA** (AMP). Calls "
+        "**arango-gateway-app** ``POST /api/arango/chat``, which forwards to the gateway's "
+        "``ARANGO_CONVERSATION_URL`` (AMP ADA endpoint). Returns ``conversation_id`` for follow-ups."
     ),
 )
-async def search_arango_graph(
-    query: str = Field(..., description="Natural language or AQL hint for the search."),
+async def arango_ada_conversation(
+    content: str = Field(..., description="User message for AMP ADA."),
+    conversation_id: str | None = Field(
+        default=None,
+        description="Optional conversation_id from a prior ADA reply.",
+    ),
 ) -> str:
-    logger.info("search-arango-graph (stub) query_len=%s", len(query or ""))
-    return json.dumps(
-        {
-            "ok": False,
-            "phase": "stub",
-            "detail": "Not implemented yet. Prefer internal MCP tools (AQL, traversal) on /mcp/internal.",
-        }
-    )
+    out = await _gateway_ada_call(content=content.strip(), conversation_id=conversation_id)
+    return _json(out)
 
 
 @mcp_genie_code_app.tool(
-    name="upsert-arango-graph",
+    name="arango-graph-queries",
     description=(
-        "**Stub (phase 1):** Upsert nodes/edges into an Arango graph. "
-        "Will delegate to gateway bulk APIs. Use document/graph tools on ``/mcp/internal`` meanwhile."
+        "Arango graph operations via the workspace **LLM** and the full **internal MCP tool catalog** "
+        "(AQL, collections, graphs, traversal, documents, etc.). Same orchestrator as dashboard "
+        "``POST /api/genie-mcp/chat`` — use this for search, create, upsert, and exploratory queries."
     ),
 )
-async def upsert_arango_graph(
-    payload: str = Field(default="{}", description="JSON payload describing upserts (ignored in stub)."),
+async def arango_graph_queries(
+    query: str = Field(
+        ...,
+        description="Natural-language request for Arango (search, DDL, upsert, diagnostics, …).",
+    ),
+    conversation_id: str | None = Field(
+        default=None,
+        description="Optional orchestrator conversation_id for multi-step follow-ups.",
+    ),
 ) -> str:
-    logger.info("upsert-arango-graph (stub) payload_len=%s", len(payload or ""))
-    return json.dumps(
-        {
-            "ok": False,
-            "phase": "stub",
-            "detail": "Not implemented yet. Use internal MCP document/graph tools on /mcp/internal.",
-        }
+    cfg = _agent_config()
+    logger.info("arango-graph-queries → genie_mcp_orchestrator (conversation_id=%s)", conversation_id)
+    out = await ask_genie_mcp_conversation(
+        content=query.strip(),
+        conversation_id=conversation_id,
+        config=cfg,
     )
+    return _json(out)

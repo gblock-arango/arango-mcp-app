@@ -1,11 +1,9 @@
 {
   "registry_id": "genie_code",
-  "description": "Tools exposed at /mcp for Databricks Genie Code (20-tool workspace cap across all MCP servers).",
+  "description": "Genie Code /mcp surface (3 tools). Graph queries use genie_mcp_orchestrator; ADA uses gateway /api/arango/chat → AMP; GraphML is a stub.",
   "tool_names": [
-    "genie-space-conversation",
-    "ada-conversation",
-    "create-arango-graph",
-    "search-arango-graph",
-    "upsert-arango-graph"
+    "arango-graph-machine-learning",
+    "arango-ada-conversation",
+    "arango-graph-queries"
   ]
 }

@@ -227,7 +227,14 @@ class AppSettings(BaseSettings):
     )
     geniemcp_max_tools: int = Field(
         default=20,
-        description="Max MCP tools exposed to the model (Genie Code limits MCP tools); env: GENIEMCP_MAX_TOOLS",
+        description="Max tools on Genie Code /mcp from genie_code_manifest.json (Databricks ~20-tool "
+        "workspace cap); env: GENIEMCP_MAX_TOOLS",
+    )
+    geniemcp_model_max_tools: int = Field(
+        default=32,
+        description="Max tools sent to the serving endpoint per chat request (Databricks Llama cap is 32). "
+        "Full catalog remains on /mcp/internal; orchestrator picks a subset per turn. "
+        "env: GENIEMCP_MODEL_MAX_TOOLS",
     )
     geniemcp_max_rounds: int = Field(
         default=8,
@@ -287,6 +294,7 @@ def flask_app_config(app: AppSettings | None = None) -> dict[str, Any]:
         "GENIEMCP_SERVING_ENDPOINT": (s.geniemcp_serving_endpoint or "").strip(),
         "TOOL_ROUTER_SERVING_ENDPOINT": (s.tool_router_serving_endpoint or "").strip(),
         "GENIEMCP_MAX_TOOLS": int(s.geniemcp_max_tools),
+        "GENIEMCP_MODEL_MAX_TOOLS": int(s.geniemcp_model_max_tools),
         "GENIEMCP_MAX_ROUNDS": int(s.geniemcp_max_rounds),
         "GENIEMCP_FOUNDATION_MODEL_QUERY": (s.geniemcp_foundation_model_query or "").strip(),
         "GENIEMCP_RESOLVE_FOUNDATION_ENDPOINT_DEEP": bool(s.geniemcp_resolve_foundation_endpoint_deep),

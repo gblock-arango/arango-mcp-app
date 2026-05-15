@@ -14,7 +14,6 @@ from arango_agent.services import genie_mcp_orchestrator as orch
 def mcp_config() -> dict[str, Any]:
     return {
         "GENIEMCP_SERVING_ENDPOINT": "databricks-meta-llama-3-3-70b-instruct",
-        "GENIEMCP_MAX_TOOLS": 5,
         "GENIEMCP_MAX_ROUNDS": 8,
     }
 
@@ -62,6 +61,7 @@ async def test_ask_genie_mcp_text_reply_no_tools(mcp_config: dict[str, Any]) -> 
 
     assert out["ok"] is True
     assert out["message"]["content"] == "Done."
+    assert out.get("tools_invoked") == []
     mock_client.chat.completions.create.assert_called_once()
     call_kw = mock_client.chat.completions.create.call_args.kwargs
     assert call_kw["model"] == "databricks-meta-llama-3-3-70b-instruct"
@@ -115,5 +115,6 @@ async def test_ask_genie_mcp_invokes_internal_tool(mcp_config: dict[str, Any]) -
 
     assert out["ok"] is True
     assert "Found databases" in out["message"]["content"]
+    assert out.get("tools_invoked") == ["list-databases"]
     mock_call.assert_awaited_once()
     assert mock_client.chat.completions.create.call_count == 2

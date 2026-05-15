@@ -20,11 +20,9 @@ from arango_mcp.genie_code_mcp import mcp_genie_code_app
 from arango_mcp.server import mcp_app
 
 GENIE_TOOL_NAMES = {
-    "genie-space-conversation",
-    "ada-conversation",
-    "create-arango-graph",
-    "search-arango-graph",
-    "upsert-arango-graph",
+    "arango-graph-machine-learning",
+    "arango-ada-conversation",
+    "arango-graph-queries",
 }
 
 
@@ -89,6 +87,7 @@ async def test_genie_mcp_initialize_and_list_tools(_patch_arango_connect) -> Non
             listed = await session.list_tools()
     names = {t.name for t in listed.tools}
     assert names == GENIE_TOOL_NAMES
+    assert len(names) == 3
     assert len(names) <= 20
 
 

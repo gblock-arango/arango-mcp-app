@@ -9,6 +9,7 @@ from typing import Any, Optional
 
 from urllib import error, request
 
+from arango_agent.services.databricks_app_http_auth import outbound_bearer_authorization_header
 from arango_mcp.config import GatewaySettings
 
 logger = logging.getLogger(__name__)
@@ -28,11 +29,15 @@ class GatewayArangoClient:
         gateway: GatewaySettings,
         *,
         effective_base_url: str | None = None,
+        outbound_bearer: str | None = None,
+        auth_config: dict[str, Any] | None = None,
     ) -> None:
         self._settings = gateway
         self._effective_base_url = (
             (effective_base_url or "").strip().rstrip("/") or None
         )
+        self._outbound_bearer = (outbound_bearer or "").strip() or None
+        self._auth_config = auth_config or {}
         self._proxy_url: str = ""
         self._server_version: Optional[str] = None
 
@@ -106,10 +111,14 @@ class GatewayArangoClient:
             envelope["body"] = json_body
 
         raw = json.dumps(envelope).encode("utf-8")
-        headers = {"Content-Type": "application/json", "Accept": "application/json"}
-        token = (self._settings.bearer_token or "").strip()
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            **outbound_bearer_authorization_header(
+                config=self._auth_config,
+                override_token=self._outbound_bearer,
+            ),
+        }
 
         try:
             with self._open_url(self._proxy_url, data=raw, headers=headers) as resp:
