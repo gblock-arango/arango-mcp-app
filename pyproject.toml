@@ -79,6 +79,8 @@ asyncio_mode = "auto"
 markers = [
     "cluster: tests requiring a cluster deployment (deselect with '-m not cluster')",
     "slow: tests that take a long time to run",
+    "mcp_http: MCP streamable HTTP protocol tests (in-process ASGI)",
+    "databricks_live: requires deployed app URL and DATABRICKS_TOKEN",
 ]
 timeout = 120
 timeout_func_only = true

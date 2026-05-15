@@ -177,18 +177,27 @@ arango_connector = ArangoDBConnector()
 
 @asynccontextmanager
 async def arango_db_lifespan(mcp_server_instance) -> AsyncIterator[ArangoDBConnector]:
-    """Lifespan context manager for MCP server with ArangoDB connection management."""
+    """Lifespan context manager for MCP server with ArangoDB connection management.
+
+    Connection is attempted at session start but **does not block** MCP handshake
+    (``initialize`` / ``tools/list``). Genie Code validates the server before any tool
+    runs; a hard failure here surfaces as "could not be added" even when only listing
+  tools. Arango-backed tool calls still fail until gateway/direct settings work.
+    """
     logger.info("Starting ArangoDB MCP Server...")
 
     try:
         await arango_connector.connect()
         logger.info("ArangoDB connection established successfully")
-
-        yield arango_connector
-
     except Exception as e:
-        logger.error("Failed to initialize ArangoDB connection: %s", e)
-        raise
+        logger.warning(
+            "Arango/gateway connect failed at MCP session start (MCP list/handshake may "
+            "still succeed; Arango tools fail until ARANGO_GATEWAY_* / ARANGO_HOSTS work): %s",
+            e,
+        )
+
+    try:
+        yield arango_connector
     finally:
         logger.info("Shutting down ArangoDB MCP Server...")
         await arango_connector.disconnect()

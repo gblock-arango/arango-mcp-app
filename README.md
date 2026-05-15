@@ -8,8 +8,6 @@ The **dashboard** (`arango-dashboard-app`) proxies chat to this app; **Arango cl
 
 This repo holds `app.yaml`, `deploy_app.sh`, and Python under `src/` (`arango_agent/` = Flask HTTP, `arango_mcp/` = MCP + tools).
 
-**License:** Apache-2.0 — see `LICENSE`. For architecture, bundle merge, and every route in detail, see **`README_Agent.md`**.
-
 ---
 
 ## Quick start (deploy to Databricks)
