@@ -1,408 +1,121 @@
-Responsibility: Tool-calling reasoning over Arango/UC/Vector Search
-Databricks App: an MCP-enabled agent that enables Databricks services to support ArangoAI Chat, perform tool-calling and reasoning over ArangoDB (AQL for graph & vector search), Unity Catalog, etc.
-Comments: Calls gateway tools/endpoints.
-This should be an agent endpoint/tool-calling service, not the owner of deterministic data movement:
-- Natural-language query handling
-- Tool selection
-- GraphRAG explanation
-- MCP tool calls
-- Arango semantic query planning
-- Analyst-facing reasoning
+# Arango agent (Databricks App)
 
-## ArangoDB MCP (this repository)
+**Arango agent** is a Databricks App that exposes **Genie** chat (Genie Spaces), **MCP** (Genie Code for inside Databricks Workspaces, HTTP for Databricks LLMs, and optional stdio for local runs), and **gateway-backed** Arango tools. 
 
-The Databricks MCP server, **gateway-backed Arango access**, and Databricks App metadata live at this **repository root** (alongside the `arango-solutions-mcp/` reference submodule). **Apache-2.0** — see `LICENSE`.
+Additional GraphML and Databricks Pipelines/Jobs are discussed in the Arango-Databricks suite of github repos.
 
-**Gateway mode:** optional `ARANGO_GATEWAY_BASE_URL`; otherwise resolve the active URL from `ARANGO_GATEWAY_REGISTRY_TABLE` using `DATABRICKS_SQL_WAREHOUSE_ID` (same pattern as `arango-dashboard-app`). `ARANGO_GATEWAY_BEARER_TOKEN` is optional. **Deploy / UC grants:** run `./deploy_app.sh` from this directory (includes Genie registry table + app SP grants when `GENIE_SPACE_REGISTRY_TABLE` is set).
+The **dashboard** (`arango-dashboard-app`) proxies chat to this app; **Arango cluster credentials** live on **`arango-gateway-app`**. 
 
-**Genie (UC registry / shell provision, not the app SP):** from this repo root, `./update_genie_registry_uc.sh` or `PYTHONPATH=src python src/provision_genie_uc.py` — see script headers. **`./update_arango_agent_registry_uc.sh`** publishes this app’s URL to **`ARANGO_AGENT_REGISTRY_TABLE`** (same idea as the gateway’s UC script). The Databricks App also upserts that table on startup when **`ARANGO_AGENT_REGISTRY_AUTO_CREATE=true`**.
+This repo holds `app.yaml`, `deploy_app.sh`, and Python under `src/` (`arango_agent/` = Flask HTTP, `arango_mcp/` = MCP + tools).
 
-**HTTP entry (Databricks App):** `gunicorn asgi:app -k uvicorn.workers.UvicornWorker` (see `app.yaml`). This serves **two** Streamable HTTP MCP mounts: **`https://<app-host>/mcp`** — **five** coarse tools for **Genie Code** (Genie Space, ADA stubs, graph stubs); **`https://<app-host>/mcp/internal`** — the full **~74** Arango tool catalog for **dashboard** ``POST /api/genie-mcp/chat`` (in-process ToolRouter / LLM tool loop) and other MCP clients. Flask routes remain at ``/api/...``. Pure Flask (no MCP HTTP) remains `gunicorn wsgi:app` for local debugging. The **arango-dashboard-app** proxies **`POST /api/genie/chat`**, **`POST /api/genie-mcp/chat`**, **`POST /api/arango/chat`**. Set **`ARANGO_CONVERSATION_URL`** for ADA forwarding when needed; set **`TOOL_ROUTER_SERVING_ENDPOINT`** (preferred) or **`GENIEMCP_SERVING_ENDPOINT`** for MCP-mode chat, plus **`openai`**.
-
-**MCP mode (dashboard, ``/api/genie-mcp/chat``):** uses the **internal** full-catalog FastMCP (same tool implementations as stdio). **Genie Code** must use **`/mcp`** only (Databricks **20 tools across all MCP servers** limit). Manifests: ``src/arango_mcp/tool_registries/*.json``. **Diagnostics:** ``GET /api/mcp/diagnostics`` (tool names + counts). ``./deploy_app.sh`` probes configured serving endpoints and optionally curls diagnostics when ``DATABRICKS_TOKEN`` is set.
-
-**Genie Code + custom MCP:** The Databricks App **name must start with ``mcp-``** so it appears under Genie Code → Add MCP Servers → **Custom MCP server** ([docs](https://docs.databricks.com/aws/en/genie-code/mcp)). Default deploy name is **`mcp-arango-agent`**. After ``./deploy_app.sh``, run ``scripts/grant_deploy_user_app_can_use.py`` automatically grants **CAN_USE** on that app to the CLI user (disable with ``GRANT_GENIE_CODE_DEPLOY_USER_CAN_USE=0``). Then pick the app in Genie Code and **Save**. MCP URL remains ``https://<app-host>/mcp``.
+**License:** Apache-2.0 — see `LICENSE`. For architecture, bundle merge, and every route in detail, see **`README_Agent.md`**.
 
 ---
 
-# ArangoDB MCP Server
+## Quick start (deploy to Databricks)
 
-A comprehensive [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server for ArangoDB, providing **74 tools** covering document CRUD, graph traversals, AQL queries, vector/semantic search, cluster administration, stream transactions, hot backup, user/permission management, and more.
+Prerequisites:
 
-Built for AI assistants (Cursor, Claude Desktop, etc.) that need full-spectrum access to ArangoDB's multi-model capabilities.
+- [Databricks CLI](https://docs.databricks.com/aws/en/dev-tools/cli/) logged into your workspace (`databricks auth login` or a profile).
+- **`DATABRICKS_SQL_WAREHOUSE_ID`** set in the environment or passed as the **7th** argument to `deploy_app.sh` (see script header). Replace the placeholder in `app.yaml` if you copy this repo fresh.
+- **Gateway** deployed once so **`ARANGO_GATEWAY_REGISTRY_TABLE`** has a row (unless you set **`ARANGO_GATEWAY_BASE_URL`** manually).
 
-## Supported ArangoDB Versions
-
-- **ArangoDB 3.12+** (vector search requires 3.12.4+ with `--vector-index`)
-- **ArangoDB 4.0** (under development — forward-compatible)
-
-## Prerequisites
-
-- Python 3.10+
-- [Poetry](https://python-poetry.org/docs/#installation) for dependency management
-- ArangoDB instance (local, Docker, or remote)
-
-## Quick Start
-
-### 1. Install
+From this directory:
 
 ```bash
-git clone https://github.com/arango-solutions/arango-solutions-mcp.git
-cd arango-solutions-mcp
-poetry install
+export DATABRICKS_SQL_WAREHOUSE_ID='your-warehouse-id-hex'
+./deploy_app.sh
 ```
 
-### 2. Configure Your MCP Client
+Defaults: app name **`mcp-arango-agent`** (must start with **`mcp-`** so it appears under [Genie Code → Custom MCP server](https://docs.databricks.com/aws/en/genie-code/mcp)), workspace sync path derived from `databricks current-user me`.
 
-**Cursor IDE** — edit `.cursor/mcp.json` (set `cwd` to this repository root):
+At the end of a successful run you should see **`DATABRICKS_APP_URL=...`**, a **Genie Code MCP URL** line (`…/mcp`), and (unless disabled) a **CAN_USE** grant for your CLI user on the app. Skip the grant with **`GRANT_GENIE_CODE_DEPLOY_USER_CAN_USE=0`** if you manage sharing only in the UI.
 
-```json
-{
-  "mcpServers": {
-    "arangodb-mcp": {
-      "command": "poetry",
-      "args": ["run", "python", "-m", "arango_mcp.main"],
-      "cwd": "/path/to/arango-agent",
-      "env": {
-        "PYTHONPATH": "src",
-        "ARANGO_HOSTS": "http://localhost:8529",
-        "ARANGO_ROOT_USERNAME": "root",
-        "ARANGO_ROOT_PASSWORD": "your_password_here",
-        "ARANGO_DEFAULT_DB_NAME": "myapp"
-      }
-    }
-  }
-}
+**Optional checks**
+
+```bash
+databricks serving-endpoints get databricks-meta-llama-3-3-70b-instruct -o json   # or your GENIEMCP_SERVING_ENDPOINT
+curl -sS -H "Authorization: Bearer $DATABRICKS_TOKEN" "${APP_URL}/api/mcp/diagnostics" | python3 -m json.tool
 ```
-
-**Claude Desktop** — edit `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "arangodb-mcp": {
-      "command": "poetry",
-      "args": ["run", "python", "-m", "arango_mcp.main"],
-      "cwd": "/path/to/arango-agent",
-      "env": {
-        "PYTHONPATH": "src",
-        "ARANGO_HOSTS": "http://localhost:8529",
-        "ARANGO_ROOT_USERNAME": "root",
-        "ARANGO_ROOT_PASSWORD": "your_password_here",
-        "ARANGO_DEFAULT_DB_NAME": "myapp"
-      }
-    }
-  }
-}
-```
-
-### 3. Environment Variables
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `ARANGO_HOSTS` | Yes | — | ArangoDB server URL(s) |
-| `ARANGO_ROOT_USERNAME` | Yes | — | ArangoDB username |
-| `ARANGO_ROOT_PASSWORD` | Yes | — | ArangoDB password |
-| `ARANGO_DEFAULT_DB_NAME` | No | `_system` | Default database name |
-| `ARANGO_VERIFY_SSL` | No | `true` | Verify SSL certificates |
-| `ARANGO_SSL_CERT_PATH` | No | — | Path to SSL certificate file |
-| `LOG_LEVEL` | No | `INFO` | Server log level |
-| `ENABLE_JS_TRANSACTIONS` | No | `false` | Enable server-side JavaScript transactions (security-sensitive) |
-
-#### Databricks + `arango-gateway-app`
-
-Optional `ARANGO_GATEWAY_BASE_URL`; otherwise the active row in `ARANGO_GATEWAY_REGISTRY_TABLE` read with `DATABRICKS_SQL_WAREHOUSE_ID` via the Databricks SDK (same as `arango-dashboard-app`). `ARANGO_GATEWAY_BEARER_TOKEN` is optional. Repo layout: `app.yaml`, `databricks.yml`, `deploy_app.sh`, `resources/` at repo root; Python packages under `src/arango_mcp/` (MCP + Arango) and `src/arango_agent/` (HTTP app, Genie, UC helpers).
-
-| Variable | When | Description |
-|----------|------|-------------|
-| `DATABRICKS_SQL_WAREHOUSE_ID` | Required for UC gateway URL resolution | Warehouse id for reading `ARANGO_GATEWAY_REGISTRY_TABLE`; set via `export`, `app.yaml`, or **arango-platform-bundle** `sql_warehouse_id` |
-| `ARANGO_GATEWAY_REGISTRY_TABLE` | Optional | Defaults to `workspace.default.arango_gateway_registry` |
-| `ARANGO_REGISTRY_TABLE` | Optional | Defaults to `workspace.default.arango_connection_registry` (deploy grants / future reads) |
-| `ARANGO_GATEWAY_BEARER_TOKEN` | Rare | Only if gateway ingress requires Bearer |
-| `MCP_CORS_ALLOW_ORIGINS` | Optional | Comma-separated origins for CORS on `/mcp` (Genie Code). Example: `https://my-workspace.cloud.databricks.com`. Use `*` for permissive dev (no credentials). Empty disables CORS middleware. |
-
-All tools accept an optional `database_name` parameter to override the default.
 
 ---
 
-## Tools (74)
+## What runs where
 
-### Document Operations (10)
+| Surface | URL / command | Who uses it |
+|---------|----------------|-------------|
+| **Flask API** | `https://<app-host>/api/...` | **Dashboard** proxies `genie/chat`, `genie-mcp/chat`, `arango/chat`. |
+| **Genie Code MCP** | `https://<app-host>/mcp` | Workspace Genie Code (**~5 tools**; Databricks **20 tools total** across MCP servers). |
+| **Full MCP (HTTP)** | `https://<app-host>/mcp/internal` | MCP clients that need the **full** Arango tool catalog. |
+| **Stdio MCP (local)** | `PYTHONPATH=src python -m arango_mcp.main` | Cursor, Claude Desktop, etc. |
 
-| Tool | Description |
-|------|-------------|
-| `create-document` | Insert a single document |
-| `create-documents-bulk` | Bulk insert an array of documents |
-| `read-document` | Get a document by key or ID |
-| `read-documents-with-filter` | Query documents with filters, pagination |
-| `update-document` | Partial update by key |
-| `delete-document` | Remove a document by key |
-| `replace-document` | Full document replacement |
-| `upsert-document` | Insert or update based on search criteria |
-| `update-documents-bulk` | Bulk partial updates via AQL |
-| `delete-documents-bulk` | Bulk deletes via AQL filter |
-
-### Collection Management (4)
-
-| Tool | Description |
-|------|-------------|
-| `list-collections` | List all collections in a database |
-| `create-collection` | Create document/edge collections (with sharding, replication, computed values) |
-| `delete-collection` | Drop a collection |
-| `get-collection-properties` | Collection stats, shard config, key type |
-
-### Database Management (4)
-
-| Tool | Description |
-|------|-------------|
-| `list-databases` | List all databases |
-| `create-database` | Create a new database |
-| `delete-database` | Drop a database |
-| `get-database-info` | Database properties and stats |
-
-### Graph Management (5)
-
-| Tool | Description |
-|------|-------------|
-| `list-graphs` | List named graphs |
-| `create-graph` | Create graphs (standard, SmartGraph, SatelliteGraph, EnterpriseGraph) |
-| `delete-graph` | Drop a graph (optionally drop collections) |
-| `create-edge` | Insert an edge between two vertices |
-| `get-graph-properties` | Edge definitions, orphan collections, cluster config |
-
-### Graph Traversals (4)
-
-| Tool | Description |
-|------|-------------|
-| `graph-traverse` | Multi-depth traversal with vertex/edge filters, path return |
-| `graph-shortest-path` | Single shortest path (optionally weighted) |
-| `graph-k-shortest-paths` | K alternative shortest paths |
-| `graph-neighbors` | Deduplicated neighbor discovery at a given depth |
-
-### AQL Query Engine (3)
-
-| Tool | Description |
-|------|-------------|
-| `execute-aql-query` | Execute AQL with bind variables, stats |
-| `explain-aql-query` | Execution plan analysis (indexes, costs, optimizer rules) |
-| `validate-aql-query` | Syntax check without execution |
-
-### Index Management (3)
-
-| Tool | Description |
-|------|-------------|
-| `list-indexes` | List indexes on a collection |
-| `create-index` | Create persistent, inverted, geo, TTL, vector (ANN), MDI indexes |
-| `delete-index` | Remove an index by ID |
-
-### Vector & Semantic Search (2)
-
-*Requires ArangoDB 3.12.4+ with `--vector-index` enabled.*
-
-| Tool | Description |
-|------|-------------|
-| `vector-search` | Approximate nearest-neighbor search (cosine, L2, inner product) |
-| `hybrid-search` | Combined vector + BM25 text search with weighted fusion |
-
-### Search Views (6)
-
-| Tool | Description |
-|------|-------------|
-| `list-views` | List ArangoSearch / search-alias views |
-| `create-view` | Create an ArangoSearch or search-alias view |
-| `get-view-properties` | View configuration details |
-| `update-view-properties` | Modify view settings (partial) |
-| `replace-view-properties` | Replace view configuration |
-| `delete-view` | Drop a view |
-
-### Analyzers (4)
-
-| Tool | Description |
-|------|-------------|
-| `list-analyzers` | List text analyzers |
-| `create-analyzer` | Create a custom analyzer (text, ngram, stem, etc.) |
-| `delete-analyzer` | Remove an analyzer |
-| `get-analyzer-properties` | Analyzer type and configuration |
-
-### Cluster Administration (9)
-
-| Tool | Description |
-|------|-------------|
-| `cluster-health` | Overall cluster health status |
-| `cluster-server-role` | Role of the connected server (Coordinator, DBServer, Single) |
-| `cluster-server-count` | Number of coordinators + DB servers |
-| `cluster-endpoints` | List all coordinator endpoints |
-| `cluster-server-statistics` | CPU, memory, request stats for a server |
-| `cluster-calculate-imbalance` | Shard distribution imbalance report |
-| `cluster-rebalance` | Trigger automatic shard rebalancing |
-| `cluster-toggle-maintenance` | Enable/disable cluster maintenance mode |
-| `collection-shard-distribution` | Shard → server mapping for a collection |
-
-### Stream Transactions (6)
-
-| Tool | Description |
-|------|-------------|
-| `begin-transaction` | Start a stream transaction (declare read/write/exclusive collections) |
-| `transaction-status` | Check if a transaction is running, committed, or aborted |
-| `commit-transaction` | Commit and persist all changes |
-| `abort-transaction` | Roll back all changes |
-| `list-transactions` | List currently running stream transactions |
-| `execute-transaction` | Execute a server-side JS transaction atomically (**disabled by default** — set `ENABLE_JS_TRANSACTIONS=true`) |
-
-### Hot Backup (4) — Enterprise Edition
-
-| Tool | Description |
-|------|-------------|
-| `create-backup` | Create a point-in-time hot backup of the deployment |
-| `list-backups` | List available backups |
-| `restore-backup` | Restore from a backup (server restarts) |
-| `delete-backup` | Permanently remove a backup |
-
-### User & Permission Management (9)
-
-| Tool | Description |
-|------|-------------|
-| `list-users` | List all server users |
-| `get-user` | Get user details and metadata |
-| `create-user` | Create a new user with password, active flag, extra data |
-| `update-user` | Update password, active status, or metadata |
-| `delete-user` | Remove a user and all permission grants |
-| `list-permissions` | All database/collection permission grants for a user |
-| `get-permission` | Effective permission level on a database or collection |
-| `grant-permission` | Grant rw/ro/none access at database or collection level |
-| `revoke-permission` | Remove a permission grant (falls back to parent level) |
-
-### AQL Reference (1)
-
-| Tool | Description |
-|------|-------------|
-| `get-aql-manual` | Retrieve AQL syntax, optimization, or Cypher→AQL migration guides |
+Production command is in **`app.yaml`**: `gunicorn asgi:app` with a **Uvicorn** worker so **both** MCP mounts and Flask stay up. For Flask-only local debugging: `gunicorn wsgi:app` (no MCP HTTP).
 
 ---
 
-## Architecture
+## Configuration (short)
 
-Layout mirrors **arango-gateway-app** (Databricks bundle + app metadata at repo root; Python under `src/`).
+Most settings live in **`app.yaml`** and become **process environment variables** in the Databricks App (same idea as “env” on a server — not “your laptop OS” unless you run locally).
 
-```
-arango-agent/   (this repository — MCP server at root)
-├── app.yaml
-├── databricks.yml
-├── deploy_app.sh
-├── update_genie_registry_uc.sh
-├── update_arango_agent_registry_uc.sh
-├── requirements.txt
-├── pyproject.toml
-├── resources/
-│   └── arango_mcp.app.yml
-├── src/
-│   ├── app.py                 # local stdio MCP: PYTHONPATH=src python src/app.py
-│   ├── provision_genie_uc.py  # Genie UC shell provision
-│   ├── wsgi.py
-│   ├── arango_agent/          # Databricks App (HTTP/Genie), UC/SQL — not MCP tools
-│   │   ├── webapp.py
-│   │   ├── routes/
-│   │   └── services/
-│   └── arango_mcp/            # MCP + Arango tool/agent code only
-│       ├── main.py
-│       ├── server.py
-│       ├── config.py
-│       ├── arango_connector.py
-│       ├── gateway_arango_client.py
-│       ├── gateway_database.py
-│       ├── aql_utils.py
-│       ├── agents/
-│       ├── mcp_tools/
-│       └── manuals/
-├── tests/
-└── arango-solutions-mcp/    # upstream reference submodule (optional)
-```
+| Topic | Where | Notes |
+|--------|--------|--------|
+| **Warehouse + UC** | `DATABRICKS_SQL_WAREHOUSE_ID`, registry table envs | Required for UC SQL (gateway URL, Genie registry, deploy grants). |
+| **Dashboard MCP chat** | `GENIEMCP_SERVING_ENDPOINT`, optional `TOOL_ROUTER_SERVING_ENDPOINT` | Value is a **serving endpoint name**, not a full URL; base URL is `{DATABRICKS_HOST}/serving-endpoints`. Optional `GENIEMCP_FOUNDATION_MODEL_QUERY` resolves a READY endpoint via SDK if the two endpoints are unset. |
+| **Genie space** | `GENIE_*` in `app.yaml` | Registry + auto-provision; see `README_Agent.md` §8.1. |
+| **CORS for `/mcp`** | `MCP_CORS_ALLOW_ORIGINS` | Leave **empty** to auto-allow the workspace origin from **`DATABRICKS_HOST`** (Databricks Apps). |
+| **Parent bundle** | `arango-platform-bundle/resources/apps.yml` | Overrides same-named `env` keys when you deploy via the bundle. |
 
-The codebase follows a two-layer pattern:
-
-- **MCP Tools** (`src/arango_mcp/mcp_tools/`) — thin FastMCP-decorated functions that validate inputs and delegate to agents.
-- **Agents** (`src/arango_mcp/agents/`) — business logic classes inheriting from `ArangoAgentBase` (direct `python-arango` or gateway HTTP).
-- **Databricks App** (`src/arango_agent/`) — Flask HTTP (Genie), UC helpers (gateway + **agent** URL registries, Genie), gateway URL resolution; separate from MCP tool modules so additional MCP packages can coexist.
+`app.yaml` groups **required** vs **optional** keys with comments.
 
 ---
 
-## Development
+## Genie Code (pick the app once)
 
-### Running Tests
+1. Deploy this app (**name must start with `mcp-`** — default **`mcp-arango-agent`**).
+2. In the workspace: Genie Code → **Settings** → **Add Server** → **Custom MCP server** → choose **`mcp-arango-agent`** → **Save** ([docs](https://docs.databricks.com/aws/en/genie-code/mcp)).
 
-Tests automatically spin up a Docker container with ArangoDB on a random port, run the suite, and tear it down:
+`./deploy_app.sh` tries to grant **CAN_USE** to the CLI user so the app appears for you; other users need **CAN_USE** on the app in **Compute → Apps → Sharing**.
+
+---
+
+## Local development
+
+Install (Poetry or your usual venv):
 
 ```bash
 poetry install --with dev
+```
+
+**Tests** (often need a running Arango; many tests use Docker — see existing pytest layout):
+
+```bash
 poetry run pytest tests/ -v --ignore=tests/test_cluster.py
 ```
 
-To test against an existing ArangoDB instance (skips Docker):
+**Lint**
 
 ```bash
-ARANGO_HOSTS=http://localhost:8529 \
-ARANGO_ROOT_PASSWORD=your_password \
-  poetry run pytest tests/ -v
+poetry run ruff check .
+poetry run ruff format --check .
 ```
 
-Cluster-specific tests require a multi-server deployment:
-
-```bash
-poetry run pytest tests/test_cluster.py -v
-```
-
-### Linting & Formatting
-
-```bash
-poetry run ruff check .         # lint
-poetry run ruff format --check . # format check (use without --check to auto-fix)
-poetry run mypy --ignore-missing-imports src/arango_mcp
-```
-
-### Pre-commit Hooks
-
-The project includes a `.pre-commit-config.yaml` for automated checks on commit:
-
-```bash
-pip install pre-commit
-pre-commit install
-```
-
-### Adding a New Tool
-
-1. Create an agent in `src/arango_mcp/agents/` inheriting from `ArangoAgentBase`
-2. Create tool definitions in `src/arango_mcp/mcp_tools/` using `@mcp_app.tool`
-3. Import the new tool module in `src/arango_mcp/mcp_tools/__init__.py` and `src/arango_mcp/server.py`
-4. Add tests in `tests/`
+**MCP client (stdio)** — point `cwd` at this repo and set `PYTHONPATH=src`, plus `ARANGO_*` for direct mode or gateway envs for Databricks-style gateway mode (see `src/arango_mcp/config.py`).
 
 ---
 
-## Security
+## Scripts (cheat sheet)
 
-| Feature | Description |
-|---------|-------------|
-| **Zero hardcoded credentials** | All connection parameters via `ARANGO_*` environment variables or `.env`; validated by Pydantic settings |
-| **AQL injection prevention** | All identifiers validated by `aql_utils.py` before interpolation; all values use bind variables (`@param`) |
-| **JS transaction gating** | `execute-transaction` disabled by default; requires explicit `ENABLE_JS_TRANSACTIONS=true` to enable arbitrary JS execution on the server |
-| **SSL by default** | `ARANGO_VERIFY_SSL` defaults to `true`; optional `ARANGO_SSL_CERT_PATH` for custom certs |
-| **Log redaction** | Bind variable values are never logged; only parameter keys appear in log output |
-| **Destructive operation guards** | `_system` database deletion blocked at both tool and agent levels |
+| Script | Purpose |
+|--------|---------|
+| **`./deploy_app.sh`** | Sync, create/deploy app, UC grants, agent URL publish, Genie registry steps, serving probe, optional **CAN_USE** grant. |
+| **`./update_arango_agent_registry_uc.sh`** | Upsert this app’s public URL into **`ARANGO_AGENT_REGISTRY_TABLE`**. |
+| **`scripts/grant_deploy_user_app_can_use.py`** | Grant **CAN_USE** on the app to a user (used by deploy by default). |
+| **`scripts/ensure_serving_endpoints.py`** | Print **READY** / foundation-model hints for configured serving endpoints. |
+| **`scripts/resolve_serving_endpoint_for_foundation_model.py`** | Resolve a model query string to a serving **endpoint name**. |
 
 ---
 
-## Key Features
+## More
 
-- **Zero hardcoded config** — all credentials via environment variables or `.env`
-- **Multi-model coverage** — documents, graphs, search, vectors in one server
-- **Cluster-aware** — sharding, replication, SmartGraphs, shard rebalancing
-- **ACID transactions** — stream transactions for multi-document atomicity
-- **Vector search** — approximate nearest-neighbor with cosine/L2/inner-product metrics
-- **Hybrid search** — combine vector similarity with BM25 text relevance
-- **AQL-first** — built-in manuals, explain plans, and syntax validation
-- **Security by default** — AQL injection prevention, JS transaction gating, SSL verification, log redaction
-- **Self-testing** — 223 automated tests with ephemeral Docker containers
-- **Cross-platform** — runs on macOS, Linux, Windows (via Docker)
-
-## License
-
-See [LICENSE](LICENSE) for details.
+- **`README_Agent.md`** — long-form guide for LLM agents: dual MCP, `asgi.py`, bundle merge, UC tables, orchestrator flow.
+- **`deploy_app.sh`** — read the header comment for positional args, `GENIE_SPACE_REGISTRY_TABLE=`, and failure modes.
