@@ -1,0 +1,5 @@
+{
+  "registry_id": "full_catalog",
+  "description": "All @mcp_app tools from arango_mcp/server.py side-effect imports (stdio + /mcp/internal HTTP). Count is runtime-derived; expect ~74 Arango tools.",
+  "note": "Authoritative list: GET /api/mcp/diagnostics on the deployed agent."
+}

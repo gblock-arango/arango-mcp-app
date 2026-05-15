@@ -1,5 +1,5 @@
 bundle:
-  name: arango-agent-app
+  name: mcp-arango-agent
 
 include:
   - resources/*.yml

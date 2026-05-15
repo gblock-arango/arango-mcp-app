@@ -16,6 +16,25 @@ from arango_agent.services.startup_debug_genie import run_genie_startup_debug
 logger = logging.getLogger(__name__)
 
 
+def _log_mcp_startup_inventory() -> None:
+    """Log Genie Code vs full-catalog MCP tool counts (best-effort; must not break app boot)."""
+    try:
+        from arango_mcp.genie_code_mcp import mcp_genie_code_app
+        from arango_mcp.server import mcp_app
+
+        g_tools = [str(t.name) for t in mcp_genie_code_app._tool_manager.list_tools()]
+        f_tools = [str(t.name) for t in mcp_app._tool_manager.list_tools()]
+        logger.info("MCP /mcp (Genie Code): %s tools — %s", len(g_tools), g_tools)
+        logger.info(
+            "MCP /mcp/internal (full catalog): %s tools — preview %s%s",
+            len(f_tools),
+            f_tools[:25],
+            " …" if len(f_tools) > 25 else "",
+        )
+    except Exception:
+        logger.exception("MCP startup inventory logging failed")
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
     app.config.from_mapping(flask_app_config(settings))
@@ -42,6 +61,8 @@ def create_app() -> Flask:
     }
     if app.config.get("DEBUG_STARTUP_CHECKS", False):
         app.extensions["startup_debug_status"] = run_genie_startup_debug(app)
+
+    _log_mcp_startup_inventory()
 
     app.wsgi_app = ProxyFix(
         app.wsgi_app,

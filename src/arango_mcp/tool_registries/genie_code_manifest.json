@@ -1,0 +1,11 @@
+{
+  "registry_id": "genie_code",
+  "description": "Tools exposed at /mcp for Databricks Genie Code (20-tool workspace cap across all MCP servers).",
+  "tool_names": [
+    "genie-space-conversation",
+    "ada-conversation",
+    "create-arango-graph",
+    "search-arango-graph",
+    "upsert-arango-graph"
+  ]
+}

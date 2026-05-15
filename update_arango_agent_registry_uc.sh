@@ -11,7 +11,7 @@ set -euo pipefail
 # Optional env: AGENT_REGISTRY_UC_UPSERT_RETRIES (default 10) — retries on concurrent Delta writes.
 
 BASE_URL_INPUT="${1:-${DATABRICKS_APP_URL:-}}"
-APP_NAME_INPUT="${2:-${DATABRICKS_APP_NAME:-arango-agent-app}}"
+APP_NAME_INPUT="${2:-${DATABRICKS_APP_NAME:-mcp-arango-agent}}"
 REGISTRY_TABLE="${3:-${ARANGO_AGENT_REGISTRY_TABLE:-workspace.default.arango_agent_registry}}"
 WAREHOUSE_ID="${4:-${DATABRICKS_SQL_WAREHOUSE_ID:-}}"
 PROFILE="${5:-}"

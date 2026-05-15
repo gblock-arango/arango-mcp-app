@@ -19,8 +19,18 @@ set -euo pipefail
 # On first run, if the Databricks App name does not exist yet, the script runs
 # ``databricks apps create`` before ``databricks apps deploy``. A brand-new app often shows
 # ``app_status=UNAVAILABLE`` until the first deploy; that is normal (see ``ensure_app_running_before_deploy``).
+#
+# After deploy: ``scripts/ensure_serving_endpoints.py`` (Databricks SDK) summarizes
+# ``GENIEMCP_SERVING_ENDPOINT`` / ``TOOL_ROUTER_SERVING_ENDPOINT``. It does not create endpoints.
+# To fail the script when an endpoint is missing or not READY: ``ENSURE_SERVING_ENDPOINTS_FAIL_DEPLOY=1``.
+#
+# Genie Code Custom MCP: default app name is ``mcp-arango-agent`` (must start with ``mcp-``). Post-deploy,
+# ``scripts/grant_deploy_user_app_can_use.py`` PATCHes CAN_USE for the CLI user. Skip with
+# ``GRANT_GENIE_CODE_DEPLOY_USER_CAN_USE=0``; set ``GRANT_GENIE_CODE_APP_CAN_USE_USER`` for a fixed email.
 
-APP_NAME="${1:-arango-agent-app}"
+# App name must start with ``mcp-`` to appear under Genie Code → Add MCP Servers → Custom MCP server.
+# See https://docs.databricks.com/aws/en/genie-code/mcp
+APP_NAME="${1:-mcp-arango-agent}"
 PROFILE="${3:-}"
 
 _resolve_ws_user() {
@@ -138,6 +148,64 @@ fi
 if [[ -z "${APP_SERVICE_PRINCIPAL_CLIENT_ID}" ]]; then
   echo "ERROR: Could not extract app service principal client id." >&2
   exit 1
+fi
+
+verify_serving_endpoint() {
+  local ep="$1"
+  if [[ -z "${ep// }" ]]; then
+    return 0
+  fi
+  echo "Serving endpoint probe: '${ep}'"
+  local se_json
+  if ! se_json="$(databricks serving-endpoints get "${ep}" -o json "${PROFILE_ARGS[@]}" 2>/dev/null)"; then
+    echo "WARNING: databricks serving-endpoints get '${ep}' failed (wrong name, region, or permissions)." >&2
+    return 0
+  fi
+  "${PYTHON_BIN}" -c '
+import json,sys
+d=json.load(sys.stdin)
+name=d.get("name") or ""
+state=d.get("state") or {}
+ready=state.get("ready") if isinstance(state,dict) else None
+print(f"  endpoint={name!r} state.ready={ready!r}")
+' <<< "${se_json}" || true
+}
+
+probe_mcp_diagnostics() {
+  local base="$1"
+  if [[ -z "${base// }" ]]; then
+    return 0
+  fi
+  local diag="${base%/}/api/mcp/diagnostics"
+  echo "MCP diagnostics: GET ${diag}"
+  if [[ -n "${DATABRICKS_TOKEN:-}" ]]; then
+    if curl -sS -f -H "Authorization: Bearer ${DATABRICKS_TOKEN}" "${diag}" | "${PYTHON_BIN}" -m json.tool 2>/dev/null; then
+      echo "(genie_code_mcp = Genie Code /mcp; internal_full_catalog_mcp = dashboard /mcp/internal)"
+    else
+      echo "WARNING: MCP diagnostics request failed (token may not authorize this app URL)." >&2
+    fi
+  else
+    echo "NOTE: DATABRICKS_TOKEN unset — skipping diagnostics curl. After login: export token or use UI."
+  fi
+}
+
+verify_serving_endpoint "${GENIEMCP_SERVING_ENDPOINT:-}"
+verify_serving_endpoint "${TOOL_ROUTER_SERVING_ENDPOINT:-}"
+probe_mcp_diagnostics "${APP_URL}"
+
+# Same endpoint names as above, via Databricks SDK (Serving API — not UC SQL).
+if [[ -n "${PROFILE}" ]]; then
+  export DATABRICKS_CONFIG_PROFILE="${PROFILE}"
+fi
+set +e
+"${PYTHON_BIN}" "${SCRIPT_DIR}/scripts/ensure_serving_endpoints.py"
+_ensure_se_rc=$?
+set -e
+if [[ "${_ensure_se_rc}" -ne 0 ]]; then
+  echo "WARNING: SDK serving-endpoint probe reported missing or NOT_READY (dashboard MCP needs a chat-capable endpoint)." >&2
+  if [[ "${ENSURE_SERVING_ENDPOINTS_FAIL_DEPLOY:-}" == "1" ]]; then
+    exit 1
+  fi
 fi
 
 if [[ -z "${WAREHOUSE_ID// }" ]]; then
@@ -303,6 +371,28 @@ fi
 
 echo
 echo "DATABRICKS_APP_URL=${APP_URL}"
+echo "NOTE: Genie Code MCP URL for this app: ${APP_URL%/}/mcp"
+echo "NOTE: App name '${APP_NAME}' must start with mcp- to appear in Genie Code → Custom MCP server."
+echo "NOTE: MCP CORS — leave MCP_CORS_ALLOW_ORIGINS empty in app.yaml; at runtime the App derives"
+echo "      Allow-Origin from DATABRICKS_HOST (workspace UI). Override MCP_CORS_ALLOW_ORIGINS only for extra origins or *."
+
+# Genie Code: grant CAN_USE on this app to the deploy user so they can select it in Custom MCP (PATCH ACL).
+# Skip with GRANT_GENIE_CODE_DEPLOY_USER_CAN_USE=0. Override user with GRANT_GENIE_CODE_APP_CAN_USE_USER=email.
+_grant_gc="${GRANT_GENIE_CODE_DEPLOY_USER_CAN_USE:-true}"
+if [[ "${_grant_gc,,}" == "true" || "${_grant_gc}" == "1" ]]; then
+  if [[ -n "${PROFILE}" ]]; then
+    export DATABRICKS_CONFIG_PROFILE="${PROFILE}"
+  fi
+  _grant_args=(--app-name "${APP_NAME}")
+  if [[ -n "${GRANT_GENIE_CODE_APP_CAN_USE_USER:-}" ]]; then
+    _grant_args+=(--user "${GRANT_GENIE_CODE_APP_CAN_USE_USER}")
+  fi
+  if PYTHONPATH="${SCRIPT_DIR}/src" "${PYTHON_BIN}" "${SCRIPT_DIR}/scripts/grant_deploy_user_app_can_use.py" "${_grant_args[@]}"; then
+    :
+  else
+    echo "WARNING: grant_deploy_user_app_can_use.py failed — add CAN_USE manually: Compute → Apps → ${APP_NAME} → Sharing." >&2
+  fi
+fi
 echo "# Gateway URL is read from UC (${ARANGO_GATEWAY_REGISTRY_TABLE}) unless ARANGO_GATEWAY_BASE_URL is set."
 echo "# Agent URL is read from UC (${ARANGO_AGENT_REGISTRY_TABLE}) unless ARANGO_AGENT_BASE_URL is set on consumers (e.g. dashboard)."
 echo "registry table (read): ${REGISTRY_TABLE}"

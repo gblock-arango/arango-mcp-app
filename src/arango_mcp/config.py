@@ -201,7 +201,48 @@ class AppSettings(BaseSettings):
     mcp_cors_allow_origins: str = Field(
         default="",
         description="Comma-separated ``Access-Control-Allow-Origin`` values for ``/mcp`` (Genie Code / browser). "
-        "Use ``*`` for dev (no credentials). Empty disables CORS middleware on MCP. env: MCP_CORS_ALLOW_ORIGINS",
+        "Use ``*`` for dev (no credentials). When empty in Databricks App runtime, ``asgi`` derives a single "
+        "origin from ``DATABRICKS_HOST`` so Genie Code in the workspace UI can call this app without hand "
+        "configuring CORS. env: MCP_CORS_ALLOW_ORIGINS",
+    )
+
+    arango_conversation_url: str = Field(
+        default="",
+        description="Optional HTTPS URL for POST /api/arango/chat to forward to (cluster ADA). Empty => stub. "
+        "env: ARANGO_CONVERSATION_URL",
+    )
+    arango_conversation_timeout_seconds: float = Field(
+        default=120.0,
+        description="env: ARANGO_CONVERSATION_TIMEOUT_SECONDS",
+    )
+
+    geniemcp_serving_endpoint: str = Field(
+        default="",
+        description="Serving endpoint for MCP mode chat (OpenAI-compatible); env: GENIEMCP_SERVING_ENDPOINT",
+    )
+    tool_router_serving_endpoint: str = Field(
+        default="",
+        description="Optional separate serving endpoint for ToolRouter / orchestration LLM; when set, "
+        "MCP dashboard chat prefers this over GENIEMCP_SERVING_ENDPOINT. env: TOOL_ROUTER_SERVING_ENDPOINT",
+    )
+    geniemcp_max_tools: int = Field(
+        default=20,
+        description="Max MCP tools exposed to the model (Genie Code limits MCP tools); env: GENIEMCP_MAX_TOOLS",
+    )
+    geniemcp_max_rounds: int = Field(
+        default=8,
+        description="Max assistant↔tool rounds per request; env: GENIEMCP_MAX_ROUNDS",
+    )
+    geniemcp_foundation_model_query: str = Field(
+        default="",
+        description="When GENIEMCP_SERVING_ENDPOINT and TOOL_ROUTER_SERVING_ENDPOINT are unset, resolve a "
+        "READY serving endpoint by matching this string to endpoint names and served foundation_model.name "
+        "(SDK list/get). env: GENIEMCP_FOUNDATION_MODEL_QUERY",
+    )
+    geniemcp_resolve_foundation_endpoint_deep: bool = Field(
+        default=False,
+        description="When resolving GENIEMCP_FOUNDATION_MODEL_QUERY, call serving_endpoints.get for every "
+        "endpoint if list() omits foundation_model metadata (slower). env: GENIEMCP_RESOLVE_FOUNDATION_ENDPOINT_DEEP",
     )
 
     arango: ArangoDBSettings = Field(default_factory=ArangoDBSettings)
@@ -241,6 +282,14 @@ def flask_app_config(app: AppSettings | None = None) -> dict[str, Any]:
         "ARANGO_AGENT_REGISTRY_TABLE": s.arango_agent_registry_table,
         "ARANGO_AGENT_REGISTRY_AUTO_CREATE": s.arango_agent_registry_auto_create,
         "MCP_CORS_ALLOW_ORIGINS": s.mcp_cors_allow_origins,
+        "ARANGO_CONVERSATION_URL": (s.arango_conversation_url or "").strip(),
+        "ARANGO_CONVERSATION_TIMEOUT_SECONDS": s.arango_conversation_timeout_seconds,
+        "GENIEMCP_SERVING_ENDPOINT": (s.geniemcp_serving_endpoint or "").strip(),
+        "TOOL_ROUTER_SERVING_ENDPOINT": (s.tool_router_serving_endpoint or "").strip(),
+        "GENIEMCP_MAX_TOOLS": int(s.geniemcp_max_tools),
+        "GENIEMCP_MAX_ROUNDS": int(s.geniemcp_max_rounds),
+        "GENIEMCP_FOUNDATION_MODEL_QUERY": (s.geniemcp_foundation_model_query or "").strip(),
+        "GENIEMCP_RESOLVE_FOUNDATION_ENDPOINT_DEEP": bool(s.geniemcp_resolve_foundation_endpoint_deep),
     }
 
 

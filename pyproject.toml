@@ -24,6 +24,7 @@ flask = "^3.0.0"
 gunicorn = "^22.0.0"
 uvicorn = {version = "^0.31.1", extras = ["standard"]}
 requests = "^2.31.0"
+openai = "^1.59.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

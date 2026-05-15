@@ -3,16 +3,31 @@ command:
   - "-lc"
   - "export PYTHONPATH=src && gunicorn asgi:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${DATABRICKS_APP_PORT:-8000} --workers 2 --timeout 660"
 
-# ``DATABRICKS_SQL_WAREHOUSE_ID``: set here for solo deploy, or from **arango-platform-bundle**
-# ``sql_warehouse_id`` (bundle ``resources/apps.yml`` overrides this on deploy). ``config.py``
-# does not supply a default.
+# Bundle note: ``sql_warehouse_id`` in **arango-platform-bundle** ``resources/apps.yml`` can override
+# ``DATABRICKS_SQL_WAREHOUSE_ID`` on deploy. ``config.py`` does not invent a warehouse id.
 
 env:
+  # ---------------------------------------------------------------------------
+  # REQUIRED — set (or confirm) for your workspace / bundle
+  # ---------------------------------------------------------------------------
   - name: DATABRICKS_SQL_WAREHOUSE_ID
-    description: "SQL warehouse for UC reads + Genie registry; required when using SQL/UC from this app"
+    description: >-
+      (Required) SQL warehouse id for UC reads, Genie registry SQL, and the sql-warehouse resource below.
+      Replace the placeholder with your warehouse id if this file is copied into a new workspace.
     value: "473d40703241ee4c"
+  - name: GENIEMCP_SERVING_ENDPOINT
+    description: >-
+      Serving endpoint MODEL name (not a full URL) for dashboard MCP chat when TOOL_ROUTER_SERVING_ENDPOINT is unset.
+      Default is a common pay-per-token Llama endpoint; change if your workspace uses another name or region.
+    value: "databricks-meta-llama-3-3-70b-instruct"
+
+  # ---------------------------------------------------------------------------
+  # OPTIONAL — defaults below; UC / runtime fills many empty URL and registry fields
+  # ---------------------------------------------------------------------------
+
+  # --- Gateway & Arango registry (empty gateway URL → resolved from UC when configured) ---
   - name: ARANGO_GATEWAY_BASE_URL
-    description: "Optional override for gateway URL (no trailing slash). When empty, resolved from UC"
+    description: "Optional override for gateway URL (no trailing slash). When empty, resolved from UC (ARANGO_GATEWAY_REGISTRY_TABLE)."
     value: ""
   - name: ARANGO_GATEWAY_REGISTRY_TABLE
     description: "UC Delta table where arango-gateway-app publishes base_url (catalog.schema.table)"
@@ -27,16 +42,24 @@ env:
     description: "UC connection registry (SELECT for deploy grants / parity with dashboard)"
     value: "workspace.default.arango_connection_registry"
   - name: ARANGO_DEFAULT_DB_NAME
+    description: "Default Arango database name when using direct (non-gateway) settings"
     value: "_system"
-  - name: DEBUG_STARTUP_CHECKS
-    value: "true"
-  - name: DEBUG_WEBHOOK_URL
+
+  # --- Genie (spaces, UC registry, auto-provision; safe defaults for most installs) ---
+  - name: GENIE_SPACE_TITLE
+    description: "Title for auto-provisioned Genie space"
+    value: "Genie (Arango agent)"
+  - name: GENIE_SPACE_DESCRIPTION
+    description: "Description for auto-provisioned Genie space"
     value: ""
   - name: GENIE_SPACE_ID
+    description: "Optional existing Genie space id; empty with auto-provision uses registry / create_space"
     value: ""
   - name: GENIE_SPACE_REGISTRY_TABLE
+    description: "UC Delta table for Genie space id registry"
     value: "workspace.default.genie_space_registry"
   - name: GENIE_SPACE_REGISTRY_AUTO_CREATE
+    description: "When true, ensure registry table exists where permissions allow"
     value: "true"
   - name: GENIE_AUTO_PROVISION
     description: "If true and GENIE_SPACE_ID is empty and UC has no usable active row, app calls Genie create_space and upserts into GENIE_SPACE_REGISTRY_TABLE at startup (file lock avoids duplicate spaces under Gunicorn)."
@@ -45,18 +68,19 @@ env:
     description: "When true, the app will not create a Genie space via API when UC has none / unusable (default false — server auto-provision is on)"
     value: "false"
   - name: GENIE_SERIALIZED_SPACE
+    description: "Optional inline serialized space payload (advanced)"
     value: ""
   - name: GENIE_SERIALIZED_SPACE_FILE
-    value: ""
-  - name: GENIE_SPACE_TITLE
-    value: "Genie (Arango agent)"
-  - name: GENIE_SPACE_DESCRIPTION
+    description: "Optional path to serialized space file (advanced)"
     value: ""
   - name: GENIE_SPACE_PARENT_PATH
+    description: "Workspace folder parent for new Genie spaces"
     value: ""
   - name: GENIE_PROVISION_LOCK_PATH
+    description: "Optional path for Genie provision file lock (default inside app if empty)"
     value: ""
   - name: GENIE_MESSAGE_TIMEOUT_SECONDS
+    description: "HTTP timeout for Genie conversation API calls"
     value: "600"
   - name: GENIE_VERIFY_GENIE_SPACE_READABLE
     description: "When true, app checks Genie get_space before using UC registry id; unreadable ids are deactivated so server auto-provision can insert an app-SP-owned space"
@@ -64,8 +88,44 @@ env:
   - name: GENIE_USE_APP_RUNTIME_AUTH_FOR_SDK
     description: "When true (default), Genie in a Databricks App uses plain WorkspaceClient() (this app's injected OAuth client). Off-platform, with HOST+CLIENT_ID+SECRET set, Genie may strip those vars so DATABRICKS_TOKEN can be used. SQL/UC still uses default WorkspaceClient. Set false for local Genie tests that must force M2M."
     value: "true"
+
+  # --- Dashboard MCP / OpenAI-compatible serving (defaults are names, not URLs; confirm in Serving UI) ---
+  - name: GENIEMCP_FOUNDATION_MODEL_QUERY
+    description: "When GENIEMCP_SERVING_ENDPOINT and TOOL_ROUTER_SERVING_ENDPOINT are empty, SDK can resolve a READY endpoint from this query string (see GENIEMCP_RESOLVE_FOUNDATION_ENDPOINT_DEEP)."
+    value: ""
+  - name: GENIEMCP_RESOLVE_FOUNDATION_ENDPOINT_DEEP
+    description: "When true, resolving GENIEMCP_FOUNDATION_MODEL_QUERY calls serving_endpoints.get for each endpoint if list() omits foundation_model metadata (slower)."
+    value: "false"
+  - name: TOOL_ROUTER_SERVING_ENDPOINT
+    description: "Optional separate serving endpoint name for ToolRouter; when set, wins over GENIEMCP_SERVING_ENDPOINT for MCP chat."
+    value: ""
+  - name: GENIEMCP_MAX_TOOLS
+    description: "Max MCP tools registered with the model per request (cap ~20 like Genie Code)"
+    value: "20"
+  - name: GENIEMCP_MAX_ROUNDS
+    description: "Max model↔tool rounds per GenieMCP request"
+    value: "8"
+
+  # --- HTTP / CORS / outbound ADA ---
   - name: MCP_CORS_ALLOW_ORIGINS
-    description: "Comma-separated origins for CORS on /mcp (Genie Code). Use your workspace origin (https://….cloud.databricks.com) or * for dev (no credentials). Empty disables CORS middleware."
+    description: >-
+      Optional comma-separated origins for CORS on /mcp and /mcp/internal (Genie Code / browser).
+      When empty, the Databricks App derives the workspace UI origin from DATABRICKS_HOST (no hand
+      CORS setup). Override with https://….cloud.databricks.com or * for dev (no credentials).
+    value: ""
+  - name: ARANGO_CONVERSATION_URL
+    description: "Optional HTTPS URL for POST /api/arango/chat (dashboard “Use Arango cluster”) to forward to (cluster ADA). Empty => stub. Genie Code uses /mcp separately."
+    value: ""
+  - name: ARANGO_CONVERSATION_TIMEOUT_SECONDS
+    description: "HTTP timeout for outbound ARANGO_CONVERSATION_URL requests"
+    value: "120"
+
+  # --- Diagnostics ---
+  - name: DEBUG_STARTUP_CHECKS
+    description: "When true, run extra startup diagnostics (Genie auth, etc.)"
+    value: "true"
+  - name: DEBUG_WEBHOOK_URL
+    description: "Optional POST target for startup debug payload"
     value: ""
 
 resources:

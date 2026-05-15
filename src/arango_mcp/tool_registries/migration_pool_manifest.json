@@ -1,0 +1,5 @@
+{
+  "registry_id": "migration_pool",
+  "description": "Planned moves: subsets of full_catalog tools to promote into genie_code or ToolRouter flows. Edit this file as you migrate.",
+  "tool_names": []
+}

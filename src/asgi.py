@@ -1,13 +1,20 @@
-"""ASGI entrypoint: stateless MCP at ``/mcp`` (Genie Code) + Flask (Genie HTTP, ``/api``).
+"""ASGI entrypoint: Genie Code MCP at ``/mcp`` + full catalog at ``/mcp/internal`` + Flask (``/api``).
 
-Run with Gunicorn’s Uvicorn worker (see ``app.yaml``) so Starlette lifespan runs and the
-Streamable HTTP session manager stays active for MCP requests.
+Run with Gunicorn’s Uvicorn worker (see ``app.yaml``) so Starlette lifespan runs and both MCP
+session managers stay active.
+
+When ``MCP_CORS_ALLOW_ORIGINS`` is unset, MCP routes enable CORS for the workspace origin parsed
+from ``DATABRICKS_HOST`` (injected in Databricks Apps) so Genie Code can call ``/mcp`` without
+post-deploy CORS edits.
 """
 
 from __future__ import annotations
 
+import logging
+import os
 from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
+from urllib.parse import urlparse
 
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
@@ -21,15 +28,14 @@ from starlette.types import ASGIApp
 
 from arango_agent.webapp import create_app
 from arango_mcp.config import settings
+from arango_mcp.genie_code_mcp import mcp_genie_code_app
 from arango_mcp.server import mcp_app
+
+logger = logging.getLogger(__name__)
 
 
 class _BrowserFriendlyMcpGet(BaseHTTPMiddleware):
-    """Plain browser GETs use ``Accept: text/html``; MCP GET requires ``text/event-stream``.
-
-    Avoid returning JSON-RPC ``Not Acceptable`` when someone pastes ``/mcp`` into a tab to smoke-test.
-    Genie Code and real MCP clients send the right ``Accept`` value and are unchanged.
-    """
+    """Plain browser GETs use ``Accept: text/html``; MCP GET requires ``text/event-stream``."""
 
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
@@ -37,7 +43,7 @@ class _BrowserFriendlyMcpGet(BaseHTTPMiddleware):
         if request.method != "GET":
             return await call_next(request)
         path = request.url.path
-        if path not in ("/mcp", "/mcp/"):
+        if path not in ("/mcp", "/mcp/", "/mcp/internal", "/mcp/internal/"):
             return await call_next(request)
         accept = (request.headers.get("accept") or "").lower()
         if "text/event-stream" in accept:
@@ -46,6 +52,7 @@ class _BrowserFriendlyMcpGet(BaseHTTPMiddleware):
             {
                 "ok": True,
                 "endpoint": "mcp-streamable-http",
+                "path": path,
                 "message": (
                     "MCP is up. Browsers do not send the MCP protocol headers on a normal GET. "
                     "Genie Code and MCP clients use Accept: text/event-stream for this GET (and "
@@ -55,19 +62,20 @@ class _BrowserFriendlyMcpGet(BaseHTTPMiddleware):
         )
 
 
-class _NormalizeMcpPath(BaseHTTPMiddleware):
-    """Starlette ``Mount("/mcp", …)`` compiles to ``^/mcp/(?P<path>.*)$``, so ``/mcp`` alone does not match.
-
-    Genie Code expects ``https://…/mcp`` (no trailing slash). Rewrite ``/mcp`` → ``/mcp/`` before routing
-    so the mount and inner ``streamable_http_path="/"`` line up.
-    """
+class _NormalizeMcpPaths(BaseHTTPMiddleware):
+    """Rewrite bare ``/mcp`` and ``/mcp/internal`` so Starlette ``Mount(.../)`` matches."""
 
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        if request.scope["type"] == "http" and request.scope.get("path") == "/mcp":
-            request.scope["path"] = "/mcp/"
-            request.scope["raw_path"] = b"/mcp/"
+        if request.scope["type"] == "http":
+            p = request.scope.get("path")
+            if p == "/mcp":
+                request.scope["path"] = "/mcp/"
+                request.scope["raw_path"] = b"/mcp/"
+            elif p == "/mcp/internal":
+                request.scope["path"] = "/mcp/internal/"
+                request.scope["raw_path"] = b"/mcp/internal/"
         return await call_next(request)
 
 
@@ -79,12 +87,35 @@ def _parse_cors_origins(raw: str) -> list[str] | None:
     return parts or None
 
 
-def _build_mcp_asgi() -> ASGIApp:
-    """Streamable HTTP MCP; optional CORS for browser / Genie Code."""
-    inner = mcp_app.streamable_http_app()
-    origins = _parse_cors_origins(settings.mcp_cors_allow_origins)
+def _workspace_origin_from_databricks_host() -> str | None:
+    """Workspace web UI origin for Genie Code cross-origin calls to this App (scheme + host, no path)."""
+    raw = (os.environ.get("DATABRICKS_HOST") or "").strip()
+    if not raw:
+        return None
+    if "://" not in raw:
+        raw = "https://" + raw.lstrip("/")
+    u = urlparse(raw)
+    if not u.scheme or not u.netloc:
+        return None
+    return f"{u.scheme}://{u.netloc}"
+
+
+def _mcp_cors_allowlist_raw() -> str:
+    """Explicit ``MCP_CORS_ALLOW_ORIGINS`` wins; else use ``DATABRICKS_HOST`` origin in App runtime."""
+    explicit = (settings.mcp_cors_allow_origins or "").strip()
+    if explicit:
+        return explicit
+    return (_workspace_origin_from_databricks_host() or "").strip()
+
+
+def _wrap_mcp_cors(inner: ASGIApp) -> ASGIApp:
+    raw = _mcp_cors_allowlist_raw()
+    origins = _parse_cors_origins(raw)
     if not origins:
         return inner
+    auto = not (settings.mcp_cors_allow_origins or "").strip()
+    if auto:
+        logger.info("MCP CORS: MCP_CORS_ALLOW_ORIGINS unset — using %s (from DATABRICKS_HOST)", origins)
     if origins == ["*"]:
         return CORSMiddleware(
             inner,
@@ -102,24 +133,31 @@ def _build_mcp_asgi() -> ASGIApp:
     )
 
 
+_genie_inner = mcp_genie_code_app.streamable_http_app()
+_full_inner = mcp_app.streamable_http_app()
+_mcp_genie_asgi = _wrap_mcp_cors(_genie_inner)
+_mcp_full_asgi = _wrap_mcp_cors(_full_inner)
+
+
 @asynccontextmanager
 async def _lifespan(_: Starlette) -> AsyncIterator[None]:
-    # Mounted apps do not receive ASGI lifespan; run the MCP session manager at the root.
-    async with mcp_app.session_manager.run():
+    async with AsyncExitStack() as stack:
+        await stack.enter_async_context(mcp_genie_code_app.session_manager.run())
+        await stack.enter_async_context(mcp_app.session_manager.run())
         yield
 
 
 _flask = create_app()
-_mcp_asgi = _build_mcp_asgi()
 
 app = Starlette(
     routes=[
-        Mount("/mcp/", app=_mcp_asgi),
+        Mount("/mcp/internal/", app=_mcp_full_asgi),
+        Mount("/mcp/", app=_mcp_genie_asgi),
         Mount("/", app=WSGIMiddleware(_flask)),
     ],
     lifespan=_lifespan,
     middleware=[
-        Middleware(_NormalizeMcpPath),
+        Middleware(_NormalizeMcpPaths),
         Middleware(_BrowserFriendlyMcpGet),
     ],
 )

@@ -74,8 +74,9 @@ All operations accept an optional database_name parameter.
 - Use stream transactions for multi-document atomicity
 - Hot backup operations require Enterprise Edition
 """
-# FastMCP instance: stdio (CLI) and HTTP MCP at ``/mcp`` when mounted in ``asgi.py``.
-# - ``streamable_http_path="/"``: mounted at ``/mcp`` on the host app → public URL ``…/mcp`` (Genie Code).
+# FastMCP instance: stdio (CLI) and HTTP MCP at ``/mcp/internal`` when mounted in ``asgi.py``.
+# Genie Code uses a **separate** small FastMCP at ``/mcp`` (:mod:`arango_mcp.genie_code_mcp`).
+# - ``streamable_http_path="/"``: mounted at ``/mcp/internal`` on the host app.
 # - ``stateless_http=True``: required for Databricks custom MCP Apps / Genie Code.
 # - ``transport_security``: disable Host/Origin pinning so the app works behind Databricks ingress.
 mcp_app = FastMCP(

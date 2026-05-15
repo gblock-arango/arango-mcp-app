@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import requests
 from flask import Blueprint, current_app, jsonify, request
@@ -11,7 +12,9 @@ from arango_agent.services.gateway_url_registry import (
     effective_gateway_base_url,
     invalidate_gateway_url_uc_cache,
 )
+from arango_agent.services.arango_conversation import ask_arango_conversation
 from arango_agent.services.genie_conversation import ask_genie_conversation
+from arango_agent.services.genie_mcp_orchestrator import ask_genie_mcp_conversation_sync
 from arango_agent.services.genie_registry import (
     invalidate_genie_space_after_acl_error,
     reconcile_genie_uc_registry_for_dashboard_app,
@@ -28,6 +31,43 @@ api_blueprint = Blueprint("api", __name__)
 @api_blueprint.get("/health")
 def health():
     return jsonify({"status": "ok"})
+
+
+@api_blueprint.get("/mcp/diagnostics")
+def mcp_diagnostics():
+    """Runtime MCP inventory: Genie Code surface (``/mcp``) vs full catalog (``/mcp/internal``) + manifests."""
+    try:
+        from arango_mcp.genie_code_mcp import mcp_genie_code_app
+        from arango_mcp.server import mcp_app as mcp_full_app
+        from arango_mcp.tool_registries import load_manifest
+
+        def tool_names(app: Any) -> list[str]:
+            return [str(t.name) for t in app._tool_manager.list_tools()]
+
+        genie_names = tool_names(mcp_genie_code_app)
+        full_names = tool_names(mcp_full_app)
+        return jsonify(
+            {
+                "ok": True,
+                "genie_code_mcp": {
+                    "http_path": "/mcp",
+                    "tool_count": len(genie_names),
+                    "tool_names": genie_names,
+                    "manifest": load_manifest("genie_code"),
+                },
+                "internal_full_catalog_mcp": {
+                    "http_path": "/mcp/internal",
+                    "tool_count": len(full_names),
+                    "tool_names_preview": full_names[:80],
+                    "tool_names_truncated": max(0, len(full_names) - 80),
+                    "manifest": load_manifest("full_catalog"),
+                },
+                "migration_pool_manifest": load_manifest("migration_pool"),
+            }
+        )
+    except Exception as exc:
+        logger.warning("mcp_diagnostics failed: %s", exc)
+        return jsonify({"ok": False, "error": str(exc)}), 500
 
 
 @api_blueprint.post("/genie/chat")
@@ -81,6 +121,59 @@ def genie_chat():
                     conversation_id=None,
                     timeout_seconds=timeout,
                 )
+    status = 200 if result.get("ok") else 502
+    return jsonify(result), status
+
+
+@api_blueprint.post("/arango/chat")
+def arango_chat():
+    """
+    Dashboard **ADA** mode: same JSON body as ``/api/genie/chat``.
+    Forwards to ``ARANGO_CONVERSATION_URL`` when set; otherwise stub. Genie Code in the workspace UI still uses ``/mcp`` separately.
+    """
+    payload = request.get_json(silent=True) or {}
+    content = str(
+        payload.get("content") or payload.get("message") or ""
+    ).strip()
+    if not content:
+        return jsonify({"ok": False, "error": "content or message is required"}), 400
+
+    conversation_id = payload.get("conversation_id")
+    if conversation_id is not None:
+        conversation_id = str(conversation_id).strip() or None
+
+    result = ask_arango_conversation(
+        content=content,
+        conversation_id=conversation_id,
+        config=current_app.config,
+    )
+    status = 200 if result.get("ok") else 502
+    return jsonify(result), status
+
+
+@api_blueprint.post("/genie-mcp/chat")
+def genie_mcp_chat():
+    """
+    Dashboard **MCP** mode: workspace foundation-model chat with this app's **full-catalog**
+    FastMCP tools (HTTP ``/mcp/internal`` registry). Same JSON body as ``/api/genie/chat``.
+    Serving endpoint: ``TOOL_ROUTER_SERVING_ENDPOINT`` if set, else ``GENIEMCP_SERVING_ENDPOINT``.
+    """
+    payload = request.get_json(silent=True) or {}
+    content = str(
+        payload.get("content") or payload.get("message") or ""
+    ).strip()
+    if not content:
+        return jsonify({"ok": False, "error": "content or message is required"}), 400
+
+    conversation_id = payload.get("conversation_id")
+    if conversation_id is not None:
+        conversation_id = str(conversation_id).strip() or None
+
+    result = ask_genie_mcp_conversation_sync(
+        content=content,
+        conversation_id=conversation_id,
+        config=current_app.config,
+    )
     status = 200 if result.get("ok") else 502
     return jsonify(result), status
 
