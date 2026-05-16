@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional, Union  # Union for properties
 
 from pydantic import Field
 
-from arango_mcp.agents.analyzer_management_agent import AnalyzerManagementAgent
+from arango_mcp.mcp_tool_handlers.analyzer_management_agent import AnalyzerManagementAgent
 from arango_mcp.server import mcp_app
 
 analyzer_agent = AnalyzerManagementAgent()

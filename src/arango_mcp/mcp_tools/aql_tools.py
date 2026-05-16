@@ -2,7 +2,7 @@ from typing import Any, Dict, Optional
 
 from pydantic import Field
 
-from arango_mcp.agents.aql_execution_agent import AQLExecutionAgent
+from arango_mcp.mcp_tool_handlers.aql_execution_agent import AQLExecutionAgent
 from arango_mcp.server import mcp_app
 
 aql_agent = AQLExecutionAgent()

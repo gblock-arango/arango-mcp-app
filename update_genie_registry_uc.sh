@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Genie registry upsert (manual / CI — uses shell M2M or PAT, not the Databricks App service principal).
-# Run from this repository (arango-agent) root.
+# Run from this repository (arango-mcp-app) root.
 #
 # Auth (first match wins):
 #   1) OAuth M2M: DATABRICKS_HOST + DATABRICKS_CLIENT_ID + DATABRICKS_CLIENT_SECRET

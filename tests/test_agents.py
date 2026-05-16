@@ -6,12 +6,12 @@ that agents produce correct results against an ephemeral test database.
 
 import pytest
 
-from arango_mcp.agents.aql_execution_agent import AQLExecutionAgent
-from arango_mcp.agents.cluster_management_agent import ClusterManagementAgent
-from arango_mcp.agents.collection_management_agent import CollectionManagementAgent
-from arango_mcp.agents.document_crud_agent import DocumentCRUDAgent
-from arango_mcp.agents.graph_management_agent import GraphManagementAgent
-from arango_mcp.agents.index_management_agent import IndexManagementAgent
+from arango_mcp.mcp_tool_handlers.aql_execution_agent import AQLExecutionAgent
+from arango_mcp.mcp_tool_handlers.cluster_management_agent import ClusterManagementAgent
+from arango_mcp.mcp_tool_handlers.collection_management_agent import CollectionManagementAgent
+from arango_mcp.mcp_tool_handlers.document_crud_agent import DocumentCRUDAgent
+from arango_mcp.mcp_tool_handlers.graph_management_agent import GraphManagementAgent
+from arango_mcp.mcp_tool_handlers.index_management_agent import IndexManagementAgent
 
 # ── Collection Agent ──────────────────────────────────────────────────
 

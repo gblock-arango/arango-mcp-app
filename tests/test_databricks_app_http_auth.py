@@ -12,7 +12,7 @@ from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
-from arango_agent.services import databricks_app_http_auth as auth
+from arango_dashboard_agent.services import databricks_app_http_auth as auth
 
 
 def test_bearer_token_from_authorization_header() -> None:

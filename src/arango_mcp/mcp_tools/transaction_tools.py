@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
-from arango_mcp.agents.transaction_management_agent import TransactionManagementAgent
+from arango_mcp.mcp_tool_handlers.transaction_management_agent import TransactionManagementAgent
 from arango_mcp.server import mcp_app
 
 txn_agent = TransactionManagementAgent()

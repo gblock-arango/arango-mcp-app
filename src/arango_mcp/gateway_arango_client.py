@@ -9,7 +9,7 @@ from typing import Any, Optional
 
 from urllib import error, request
 
-from arango_agent.services.databricks_app_http_auth import outbound_bearer_authorization_header
+from arango_dashboard_agent.services.databricks_app_http_auth import outbound_bearer_authorization_header
 from arango_mcp.config import GatewaySettings
 
 logger = logging.getLogger(__name__)

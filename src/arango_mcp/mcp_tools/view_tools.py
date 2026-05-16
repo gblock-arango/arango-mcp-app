@@ -2,7 +2,7 @@ from typing import Any, Dict, Optional
 
 from pydantic import Field
 
-from arango_mcp.agents.view_management_agent import ViewManagementAgent
+from arango_mcp.mcp_tool_handlers.view_management_agent import ViewManagementAgent
 from arango_mcp.server import mcp_app
 
 view_agent = ViewManagementAgent()

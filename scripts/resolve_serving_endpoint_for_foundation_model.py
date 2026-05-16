@@ -58,7 +58,7 @@ def main() -> int:
         print(f"ERROR: WorkspaceClient() failed: {exc}", file=sys.stderr)
         return 1
 
-    from arango_agent.services.foundation_model_endpoint_resolver import resolve_serving_endpoint_name
+    from arango_dashboard_agent.services.foundation_model_endpoint_resolver import resolve_serving_endpoint_name
 
     ep = resolve_serving_endpoint_name(
         w,

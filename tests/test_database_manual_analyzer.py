@@ -4,9 +4,9 @@ import contextlib
 
 import pytest  # noqa: I001
 
-from arango_mcp.agents.analyzer_management_agent import AnalyzerManagementAgent
-from arango_mcp.agents.database_management_agent import DatabaseManagementAgent
-from arango_mcp.agents.manual_management_agent import ManualManagementAgent
+from arango_mcp.mcp_tool_handlers.analyzer_management_agent import AnalyzerManagementAgent
+from arango_mcp.mcp_tool_handlers.database_management_agent import DatabaseManagementAgent
+from arango_mcp.mcp_tool_handlers.manual_management_agent import ManualManagementAgent
 
 # ── Database Agent ────────────────────────────────────────────────────
 

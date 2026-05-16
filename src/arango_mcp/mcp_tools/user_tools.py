@@ -2,7 +2,7 @@ from typing import Any, Dict, Literal, Optional
 
 from pydantic import Field
 
-from arango_mcp.agents.user_management_agent import UserManagementAgent
+from arango_mcp.mcp_tool_handlers.user_management_agent import UserManagementAgent
 from arango_mcp.server import mcp_app
 
 user_agent = UserManagementAgent()

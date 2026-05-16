@@ -12,7 +12,7 @@ def main() -> int:
     if str(src) not in sys.path:
         sys.path.insert(0, str(src))
 
-    from arango_agent.services.genie_registry import provision_genie_space_cli
+    from arango_dashboard_agent.services.genie_registry import provision_genie_space_cli
 
     return provision_genie_space_cli()
 

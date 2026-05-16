@@ -1,12 +1,12 @@
-# Arango agent (Databricks App)
+# Arango MCP app (Databricks App)
 
-**Arango agent** is a Databricks App that exposes **Genie** chat (Genie Spaces), **MCP** (Genie Code for inside Databricks Workspaces, HTTP for Databricks LLMs, and optional stdio for local runs), and **gateway-backed** Arango tools. 
+**Arango MCP app** (`arango-mcp-app`) is a Databricks App that exposes **Genie** chat (Genie Spaces), **MCP** (Genie Code for inside Databricks Workspaces, HTTP for Databricks LLMs, and optional stdio for local runs), and **gateway-backed** Arango tools. 
 
 Additional GraphML and Databricks Pipelines/Jobs are discussed in the Arango-Databricks suite of github repos.
 
 The **dashboard** (`arango-dashboard-app`) proxies chat to this app; **Arango cluster credentials** live on **`arango-gateway-app`**. 
 
-This repo holds `app.yaml`, `deploy_app.sh`, and Python under `src/` (`arango_agent/` = Flask HTTP, `arango_mcp/` = MCP + tools).
+This repo holds `app.yaml`, `deploy_app.sh`, and Python under `src/` (`arango_dashboard_agent/` = Flask HTTP, `arango_mcp/` = MCP + tools).
 
 ---
 

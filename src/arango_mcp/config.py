@@ -258,7 +258,7 @@ class AppSettings(BaseSettings):
 
 
 def gateway_resolution_config(app: AppSettings) -> dict[str, str]:
-    """Mapping expected by :func:`arango_agent.services.gateway_url_registry.effective_gateway_base_url`."""
+    """Mapping expected by :func:`arango_dashboard_agent.services.gateway_url_registry.effective_gateway_base_url`."""
     return {
         "ARANGO_GATEWAY_BASE_URL": app.gateway.base_url,
         "ARANGO_GATEWAY_REGISTRY_TABLE": app.gateway.registry_table,

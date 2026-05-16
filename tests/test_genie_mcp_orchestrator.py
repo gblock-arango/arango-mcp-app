@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from arango_agent.services import genie_mcp_orchestrator as orch
+from arango_dashboard_agent.services import genie_mcp_orchestrator as orch
 
 
 @pytest.fixture

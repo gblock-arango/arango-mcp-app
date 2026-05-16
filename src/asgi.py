@@ -17,7 +17,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AsyncExitStack, asynccontextmanager
 from urllib.parse import urlparse
 
-from arango_agent.services.async_bridge import set_main_event_loop
+from arango_dashboard_agent.services.async_bridge import set_main_event_loop
 
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
@@ -29,8 +29,8 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Mount
 from starlette.types import ASGIApp
 
-from arango_agent.services.databricks_app_http_auth import McpInboundBearerMiddleware
-from arango_agent.webapp import create_app
+from arango_dashboard_agent.services.databricks_app_http_auth import McpInboundBearerMiddleware
+from arango_dashboard_agent.webapp import create_app
 from arango_mcp.config import settings
 from arango_mcp.genie_code_mcp import mcp_genie_code_app
 from arango_mcp.server import mcp_app

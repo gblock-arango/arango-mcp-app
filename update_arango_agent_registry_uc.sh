@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Publish the arango-agent public HTTPS URL to Unity Catalog (for arango-dashboard-app
+# Publish the arango-mcp-app public HTTPS URL to Unity Catalog (for arango-dashboard-app
 # and other consumers). Run as a human with SQL warehouse access. Optionally pass the
 # agent app service principal id so the running app can upsert the same table on startup.
 #
@@ -88,7 +88,7 @@ ESC_URL="$(safe_sql_literal "${BASE_URL}")"
 ESC_APP="$(safe_sql_literal "${APP_NAME_INPUT}")"
 FQTBL="\`${CATALOG_NAME}\`.\`${SCHEMA_NAME}\`.\`${TABLE_NAME}\`"
 
-echo "Ensuring arango-agent URL registry schema/table exists..."
+echo "Ensuring arango-mcp-app URL registry schema/table exists..."
 run_sql "CREATE SCHEMA IF NOT EXISTS \`${CATALOG_NAME}\`.\`${SCHEMA_NAME}\`" || exit 1
 run_sql "CREATE TABLE IF NOT EXISTS ${FQTBL} (base_url STRING NOT NULL, app_name STRING NOT NULL, is_active BOOLEAN NOT NULL, updated_at TIMESTAMP NOT NULL) USING DELTA" || exit 1
 
@@ -97,7 +97,7 @@ if ! ( run_sql "GRANT SELECT, MODIFY ON TABLE ${FQTBL} TO \`account users\`" ); 
   echo "NOTE: GRANT to \`account users\` failed (ignore if you are not table owner)." >&2
 fi
 
-echo "Upserting active arango-agent base URL into ${REGISTRY_TABLE}..."
+echo "Upserting active arango-mcp-app base URL into ${REGISTRY_TABLE}..."
 # Idempotent MERGE so concurrent writers (this script + gunicorn workers running
 # publish_agent_base_url on startup) cannot leave duplicate active rows. The MERGE
 # atomically (a) inserts the row when missing, (b) re-activates an existing row for

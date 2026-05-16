@@ -18,7 +18,7 @@ def test_genie_code_allowed_tool_names_respects_cap() -> None:
 
 
 def test_tools_for_openai_uses_full_catalog_without_slice() -> None:
-    from arango_agent.services import genie_mcp_orchestrator as orch
+    from arango_dashboard_agent.services import genie_mcp_orchestrator as orch
 
     tools = [
         SimpleNamespace(name=f"tool-{i}", description=f"d{i}", parameters={})

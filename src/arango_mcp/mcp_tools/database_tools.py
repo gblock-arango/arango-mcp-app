@@ -2,7 +2,7 @@ from typing import Any, Dict, Optional
 
 from pydantic import Field
 
-from arango_mcp.agents.database_management_agent import DatabaseManagementAgent
+from arango_mcp.mcp_tool_handlers.database_management_agent import DatabaseManagementAgent
 from arango_mcp.server import mcp_app
 
 db_agent = DatabaseManagementAgent()

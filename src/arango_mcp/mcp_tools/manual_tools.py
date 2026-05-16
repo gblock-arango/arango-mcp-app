@@ -2,7 +2,7 @@ from typing import Any, Dict
 
 from pydantic import Field
 
-from arango_mcp.agents.manual_management_agent import ManualManagementAgent
+from arango_mcp.mcp_tool_handlers.manual_management_agent import ManualManagementAgent
 from arango_mcp.server import mcp_app
 
 manual_agent = ManualManagementAgent()

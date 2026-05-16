@@ -8,7 +8,7 @@ package-mode = true
 
 packages = [
     { include = "arango_mcp", from = "src" },
-    { include = "arango_agent", from = "src" },
+    { include = "arango_dashboard_agent", from = "src" },
 ]
 
 [tool.poetry.dependencies]

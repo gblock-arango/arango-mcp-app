@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
-from arango_mcp.agents.vector_search_agent import VectorSearchAgent
+from arango_mcp.mcp_tool_handlers.vector_search_agent import VectorSearchAgent
 from arango_mcp.server import mcp_app
 
 vector_agent = VectorSearchAgent()

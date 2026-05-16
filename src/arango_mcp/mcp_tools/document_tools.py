@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
-from arango_mcp.agents.document_crud_agent import DocumentCRUDAgent
+from arango_mcp.mcp_tool_handlers.document_crud_agent import DocumentCRUDAgent
 from arango_mcp.server import mcp_app
 
 doc_agent = DocumentCRUDAgent()

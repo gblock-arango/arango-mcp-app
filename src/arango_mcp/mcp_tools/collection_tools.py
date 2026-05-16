@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import Field
 
-from arango_mcp.agents.collection_management_agent import CollectionManagementAgent
+from arango_mcp.mcp_tool_handlers.collection_management_agent import CollectionManagementAgent
 from arango_mcp.server import mcp_app
 
 collection_agent = CollectionManagementAgent()

@@ -1,8 +1,8 @@
-# README_Agent — `arango-agent` (Databricks App)
+# README_Agent — `arango-mcp-app` (Databricks App)
 
 This document is **for LLM coding agents and engineers**: a structured, implementation-grounded description of **what this app is for**, **how HTTP and MCP are layered**, **where configuration lives and how it merges from bundles**, and **how the agent cooperates with `arango-gateway-app`, `arango-dashboard-app`, and `arango-platform-bundle`**. It complements the shorter, human-oriented `README.md` in this repository.
 
-Paths are relative to **`databricks/arango-agent/`** unless stated otherwise.
+Paths are relative to **`databricks/arango-mcp-app/`** unless stated otherwise.
 
 ---
 
@@ -10,7 +10,7 @@ Paths are relative to **`databricks/arango-agent/`** unless stated otherwise.
 
 ### 1.1 What this app owns
 
-**`arango-agent`** is the **reasoning and integration hub** in the Arango-on-Databricks split:
+**`arango-mcp-app`** is the **reasoning and integration hub** in the Arango-on-Databricks split:
 
 - **Databricks Genie (Space)** conversational API for AI/BI-style Q&A, tied to a **Unity Catalog Delta registry** that stores the active Genie space id for **this app’s service principal**.
 - **Dashboard “MCP” mode**: an **in-process** loop that calls a **workspace foundation-model serving endpoint** via the OpenAI-compatible **`/serving-endpoints`** surface and binds **FastMCP tools** from the **full** Arango catalog (the same tool implementations used for stdio MCP and for HTTP **`/mcp/internal`**).
@@ -27,13 +27,13 @@ Paths are relative to **`databricks/arango-agent/`** unless stated otherwise.
 
 ## 2. Relationship to other repositories
 
-| Artifact | Role relative to `arango-agent` |
+| Artifact | Role relative to `arango-mcp-app` |
 |----------|-----------------------------------|
 | **`arango-gateway-app`** | Publishes its public **`*.databricksapps.com`** base URL to **`ARANGO_GATEWAY_REGISTRY_TABLE`**. MCP tools and agent routes that need Arango or UC-backed graph import resolve **`ARANGO_GATEWAY_BASE_URL`** from that table (plus **`DATABRICKS_SQL_WAREHOUSE_ID`**) when the env override is empty. |
 | **`arango-dashboard-app`** | Proxies **`POST /api/genie/chat`**, **`POST /api/genie-mcp/chat`**, **`POST /api/arango/chat`** to this app. Its **`app.yaml`** declares an **`app`** resource granting **CAN USE** on the deployed agent app name (**`mcp-arango-agent`**) so the dashboard service principal may invoke the agent. Users need **CAN USE** on peer apps for server-side `requests` between Apps. |
 | **`arango-platform-bundle`** | Optional umbrella **Databricks Asset Bundle** that declares all three apps under **`resources/apps.yml`**, injects shared **`variables`** (warehouse id, UC table FQNs, optional URL overrides), and points each app’s **`source_code_path`** at the sibling repo directories. Agent env entries in the bundle **override** same-named keys from this repo’s **`app.yaml`** at deploy time. |
 
-**Genie Code note:** Databricks only lists **Custom MCP server** apps whose **name starts with `mcp-`**. This repo’s default Databricks App name is therefore **`mcp-arango-agent`**, not `arango-agent-app`. See [Connect Genie Code to MCP servers](https://docs.databricks.com/aws/en/genie-code/mcp).
+**Genie Code note:** Databricks only lists **Custom MCP server** apps whose **name starts with `mcp-`**. This repo’s default Databricks App name is therefore **`mcp-arango-agent`**, not the repo folder name alone (e.g. `arango-mcp-app` without the `mcp-` prefix). See [Connect Genie Code to MCP servers](https://docs.databricks.com/aws/en/genie-code/mcp).
 
 ---
 
@@ -58,7 +58,7 @@ The canonical production object is **`asgi:app`** in **`src/asgi.py`**.
 - **CORS:** `CORSMiddleware` wraps **both** MCP mounts. If **`MCP_CORS_ALLOW_ORIGINS`** is empty, the app derives allowed origins from **`DATABRICKS_HOST`** (Databricks Apps inject this) so Genie Code running in the workspace browser origin can call **`/mcp`** without manual CORS env tuning.
 - **Browser GET hint:** middleware returns JSON help when a browser does a normal GET without MCP **`Accept: text/event-stream`**.
 
-### 4.2 Flask layer (`src/arango_agent/webapp.py`, `src/arango_agent/routes/api.py`)
+### 4.2 Flask layer (`src/arango_dashboard_agent/webapp.py`, `src/arango_dashboard_agent/routes/api.py`)
 
 Mounted under **`/api`** (see blueprint registration in `webapp.py`). Important routes:
 
@@ -137,12 +137,12 @@ When you deploy **without** the parent bundle, these values are exactly what the
 **`arango-platform-bundle/resources/apps.yml`** defines **`arango_agent`** with:
 
 - **`name: mcp-arango-agent`** — must stay **`mcp-`**-prefixed for Genie Code.
-- **`source_code_path: ../apps/arango-agent`**
+- **`source_code_path: ../apps/arango-mcp-app`**
 - **`config.env`** — a **subset** of variables (warehouse id, UC table names) expressed as **`${var.*}`** bundle variables.
 
 **Merge semantics (conceptual):** at **`databricks bundle deploy`**, the platform merges the **bundle fragment** for this app with the **repo `app.yaml`**. Keys present in **`apps.yml` → config.env** typically **win** over duplicate names in the repo file for that deployment. Keys **only** in repo `app.yaml` keep their defaults unless you add them to the bundle.
 
-**`arango-agent/resources/arango_mcp.app.yml`** exists for **bundle-style** declarations when this repo is deployed as a **standalone** bundle; keep **`name`** aligned with **`mcp-arango-agent`** unless you have a deliberate multi-app strategy.
+**`arango-mcp-app/resources/arango_mcp.app.yml`** exists for **bundle-style** declarations when this repo is deployed as a **standalone** bundle; keep **`name`** aligned with **`mcp-arango-agent`** unless you have a deliberate multi-app strategy.
 
 ---
 
@@ -165,7 +165,7 @@ Implemented in **`genie_mcp_orchestrator.py`**:
 
 ### 8.3 Gateway-backed Arango (`arango_mcp/gateway_arango_client.py`, connector)
 
-Gateway mode resolves **`ARANGO_GATEWAY_BASE_URL`** using **`gateway_resolution_config`** + SQL against **`ARANGO_GATEWAY_REGISTRY_TABLE`** (`arango_agent/services/gateway_url_registry.py` mirrors dashboard logic for the agent’s Flask side).
+Gateway mode resolves **`ARANGO_GATEWAY_BASE_URL`** using **`gateway_resolution_config`** + SQL against **`ARANGO_GATEWAY_REGISTRY_TABLE`** (`arango_dashboard_agent/services/gateway_url_registry.py` mirrors dashboard logic for the agent’s Flask side).
 
 The MCP tool stack and Genie tools that touch Arango ultimately go through the **gateway HTTP** contract, not raw cluster TLS from the agent in the default design.
 
@@ -205,9 +205,9 @@ Positional **`deploy_app.sh`** args remain: **`APP_NAME`**, **`SOURCE_CODE_PATH`
 |------|------------------|
 | **`src/asgi.py`** | Starlette: MCP mounts, CORS, lifespan, Flask WSGI bridge. |
 | **`src/wsgi.py`** | Flask-only entry (no MCP HTTP). |
-| **`src/arango_agent/webapp.py`** | Flask factory, **`app.config.from_mapping(flask_app_config())`**, blueprints, startup hooks. |
-| **`src/arango_agent/routes/api.py`** | HTTP API surface described in §4.2. |
-| **`src/arango_agent/services/`** | Genie, MCP orchestration, gateway URL, agent URL registry, SQL helpers, startup debug. |
+| **`src/arango_dashboard_agent/webapp.py`** | Flask factory, **`app.config.from_mapping(flask_app_config())`**, blueprints, startup hooks. |
+| **`src/arango_dashboard_agent/routes/api.py`** | HTTP API surface described in §4.2. |
+| **`src/arango_dashboard_agent/services/`** | Genie, MCP orchestration, gateway URL, agent URL registry, SQL helpers, startup debug. |
 | **`src/arango_mcp/server.py`** | Full FastMCP + tool import fan-in. |
 | **`src/arango_mcp/genie_code_mcp.py`** | Genie Code FastMCP shell. |
 | **`src/arango_mcp/mcp_tools/`** | Tool implementations; **`genie_code_tools.py`** is the Genie Code subset. |

@@ -55,7 +55,7 @@ Full document lifecycle management with single-document precision and bulk throu
 | D-9 | `update-documents-bulk` | Bulk partial updates | `collection_name`, `documents_data` |
 | D-10 | `delete-documents-bulk` | Bulk deletes | `collection_name`, `documents_data` |
 
-**Implementation:** `agents/document_crud_agent.py` → `mcp_tools/document_tools.py`
+**Implementation:** `mcp_tool_handlers/document_crud_agent.py` → `mcp_tools/document_tools.py`
 
 ### 2.2 Collection Management (4 tools)
 
@@ -68,7 +68,7 @@ Create and manage document and edge collections with full cluster-aware configur
 | C-3 | `delete-collection` | Drop a collection | `collection_name` |
 | C-4 | `get-collection-properties` | Retrieve stats, shard config, revision, document count | `collection_name` |
 
-**Implementation:** `agents/collection_management_agent.py` → `mcp_tools/collection_tools.py`
+**Implementation:** `mcp_tool_handlers/collection_management_agent.py` → `mcp_tools/collection_tools.py`
 
 ### 2.3 Database Management (4 tools)
 
@@ -81,7 +81,7 @@ Manage ArangoDB databases (requires `_system` database access).
 | DB-3 | `delete-database` | Drop a database (blocks `_system` deletion) | `database_name` |
 | DB-4 | `get-database-info` | Retrieve database properties | `database_name` |
 
-**Implementation:** `agents/database_management_agent.py` → `mcp_tools/database_tools.py`
+**Implementation:** `mcp_tool_handlers/database_management_agent.py` → `mcp_tools/database_tools.py`
 
 ### 2.4 Graph Management (5 tools)
 
@@ -95,7 +95,7 @@ Manage named graphs including Enterprise features (SmartGraph, SatelliteGraph, E
 | G-4 | `create-edge` | Insert an edge between vertices within a graph | `graph_name`, `edge_collection_name`, `from_vertex_id`, `to_vertex_id`, `edge_data` |
 | G-5 | `get-graph-properties` | Retrieve graph configuration and edge definitions | `graph_name` |
 
-**Implementation:** `agents/graph_management_agent.py` → `mcp_tools/graph_tools.py`
+**Implementation:** `mcp_tool_handlers/graph_management_agent.py` → `mcp_tools/graph_tools.py`
 
 ### 2.5 Graph Traversals (4 tools)
 
@@ -108,7 +108,7 @@ AQL-backed traversal queries with automatic query generation.
 | T-3 | `graph-k-shortest-paths` | K alternative shortest paths | `start_vertex`, `target_vertex`, `limit` |
 | T-4 | `graph-neighbors` | Deduplicated neighbor discovery at a given depth | `start_vertex`, `depth`, `deduplicate` |
 
-**Implementation:** `agents/graph_traversal_agent.py` → `mcp_tools/traversal_tools.py`
+**Implementation:** `mcp_tool_handlers/graph_traversal_agent.py` → `mcp_tools/traversal_tools.py`
 
 ### 2.6 AQL Query Engine (3 tools)
 
@@ -120,7 +120,7 @@ Direct AQL execution with plan analysis and syntax validation.
 | Q-2 | `explain-aql-query` | Execution plan analysis (indexes, costs, optimizer rules) | `aql_query`, `bind_vars`, `all_plans`, `max_plans`, `opt_rules` |
 | Q-3 | `validate-aql-query` | Syntax check without execution | `aql_query` |
 
-**Implementation:** `agents/aql_execution_agent.py` → `mcp_tools/aql_tools.py`
+**Implementation:** `mcp_tool_handlers/aql_execution_agent.py` → `mcp_tools/aql_tools.py`
 
 ### 2.7 Index Management (3 tools)
 
@@ -134,7 +134,7 @@ Create and manage all ArangoDB index types including vector and MDI.
 
 **Supported index types:** `persistent`, `inverted`, `geo`, `ttl`, `fulltext`, `mdi`, `mdi-prefixed`, `vector`
 
-**Implementation:** `agents/index_management_agent.py` → `mcp_tools/index_tools.py`
+**Implementation:** `mcp_tool_handlers/index_management_agent.py` → `mcp_tools/index_tools.py`
 
 ### 2.8 Vector & Semantic Search (2 tools)
 
@@ -145,7 +145,7 @@ Approximate nearest-neighbor and hybrid search. Requires ArangoDB 3.12.4+ with `
 | V-1 | `vector-search` | ANN search using `APPROX_NEAR_*` functions | `collection_name`, `vector_field`, `query_vector`, `metric` (cosine/l2/innerProduct), `limit`, `n_probe`, `return_fields`, `filters` |
 | V-2 | `hybrid-search` | Combined vector similarity + BM25 text search with weighted fusion | `collection_name`, `vector_field`, `query_vector`, `view_name`, `text_field`, `text_query`, `text_analyzer`, `vector_weight`, `text_weight` |
 
-**Implementation:** `agents/vector_search_agent.py` → `mcp_tools/vector_tools.py`
+**Implementation:** `mcp_tool_handlers/vector_search_agent.py` → `mcp_tools/vector_tools.py`
 
 ### 2.9 Search Views (6 tools)
 
@@ -160,7 +160,7 @@ Manage ArangoSearch and search-alias views for full-text and multi-attribute sea
 | SV-5 | `replace-view-properties` | Full view configuration replacement | `view_name`, `properties` |
 | SV-6 | `delete-view` | Drop a view | `view_name` |
 
-**Implementation:** `agents/view_management_agent.py` → `mcp_tools/view_tools.py`
+**Implementation:** `mcp_tool_handlers/view_management_agent.py` → `mcp_tools/view_tools.py`
 
 ### 2.10 Analyzers (4 tools)
 
@@ -173,7 +173,7 @@ Manage text analyzers for ArangoSearch.
 | A-3 | `delete-analyzer` | Remove an analyzer | `analyzer_name` |
 | A-4 | `get-analyzer-properties` | Retrieve analyzer definition | `analyzer_name` |
 
-**Implementation:** `agents/analyzer_management_agent.py` → `mcp_tools/analyzer_tools.py`
+**Implementation:** `mcp_tool_handlers/analyzer_management_agent.py` → `mcp_tools/analyzer_tools.py`
 
 ### 2.11 Cluster Administration (9 tools)
 
@@ -191,7 +191,7 @@ Introspect and manage ArangoDB cluster deployments.
 | CL-8 | `cluster-toggle-maintenance` | Enable/disable cluster maintenance mode | `mode` (on/off) |
 | CL-9 | `collection-shard-distribution` | Shard → server mapping for a collection | `collection_name` |
 
-**Implementation:** `agents/cluster_management_agent.py` → `mcp_tools/cluster_tools.py`
+**Implementation:** `mcp_tool_handlers/cluster_management_agent.py` → `mcp_tools/cluster_tools.py`
 
 ### 2.12 Stream Transactions (6 tools)
 
@@ -206,7 +206,7 @@ Multi-document ACID transactions with both stream and server-side JavaScript exe
 | TX-5 | `list-transactions` | List currently running transactions | — |
 | TX-6 | `execute-transaction` | Execute server-side JS transaction (**disabled by default** — requires `ENABLE_JS_TRANSACTIONS=true`) | `command`, `params`, `read`, `write` |
 
-**Implementation:** `agents/transaction_management_agent.py` → `mcp_tools/transaction_tools.py`
+**Implementation:** `mcp_tool_handlers/transaction_management_agent.py` → `mcp_tools/transaction_tools.py`
 
 ### 2.13 Hot Backup — Enterprise Edition (4 tools)
 
@@ -219,7 +219,7 @@ Point-in-time deployment snapshots. Requires ArangoDB Enterprise.
 | BK-3 | `restore-backup` | Restore from a backup | `backup_id` |
 | BK-4 | `delete-backup` | Permanently remove a backup | `backup_id` |
 
-**Implementation:** `agents/backup_management_agent.py` → `mcp_tools/backup_tools.py`
+**Implementation:** `mcp_tool_handlers/backup_management_agent.py` → `mcp_tools/backup_tools.py`
 
 ### 2.14 User & Permission Management (9 tools)
 
@@ -237,7 +237,7 @@ Manage server users and database/collection-level access control.
 | U-8 | `grant-permission` | Grant rw/ro/none access | `username`, `permission`, `database`, `collection` |
 | U-9 | `revoke-permission` | Remove a permission grant | `username`, `database`, `collection` |
 
-**Implementation:** `agents/user_management_agent.py` → `mcp_tools/user_tools.py`
+**Implementation:** `mcp_tool_handlers/user_management_agent.py` → `mcp_tools/user_tools.py`
 
 ### 2.15 AQL Reference (1 tool)
 
@@ -247,7 +247,7 @@ Serve built-in AQL documentation to the AI assistant.
 |----|------|-------------|----------------|
 | M-1 | `get-aql-manual` | Retrieve AQL syntax, optimization, or Cypher→AQL migration guides | `manual_name` (`aql_ref`, `optimization`, `cypher2aql`) |
 
-**Implementation:** `agents/manual_management_agent.py` → `mcp_tools/manual_tools.py`
+**Implementation:** `mcp_tool_handlers/manual_management_agent.py` → `mcp_tools/manual_tools.py`
 
 ---
 
@@ -323,7 +323,7 @@ Serve built-in AQL documentation to the AI assistant.
 │  └───────────────────┬───────────────────────────┘  │
 │                      │ delegate                     │
 │  ┌───────────────────▼───────────────────────────┐  │
-│  │              agents/*.py                      │  │
+│  │              mcp_tool_handlers/*.py                      │  │
 │  │   15 agent classes (ArangoAgentBase)           │  │
 │  │   Business logic + error handling             │  │
 │  └───────────────────┬───────────────────────────┘  │
@@ -349,7 +349,7 @@ Serve built-in AQL documentation to the AI assistant.
 | **Configuration** | `config.py` | `pydantic-settings` with `ARANGO_*` env prefix, SSL validation, `.env` support |
 | **Connector** | `arango_connector.py` | `ArangoDBConnector` singleton, `connect`/`disconnect`, `get_db`/`get_system_db`, health check, async lifespan |
 | **Tools** | `mcp_tools/*.py` | Thin `@mcp_app.tool` wrappers with Pydantic `Field` descriptions; delegate to agents |
-| **Agents** | `agents/*.py` | Business logic classes; each inherits `ArangoAgentBase`, implements `async arun()` |
+| **Agents** | `mcp_tool_handlers/*.py` | Business logic classes; each inherits `ArangoAgentBase`, implements `async arun()` |
 | **Utilities** | `aql_utils.py` | AQL identifier validation (`validate_aql_identifier`, `validate_aql_identifiers`) |
 | **Manuals** | `manuals/*.md` | AQL reference, optimization guide, Cypher→AQL migration |
 
@@ -442,7 +442,7 @@ Tools are exposed over **stdio transport**. Clients configure the server in thei
 | **Triggers** | Push/PR to `main` |
 | **Lint job** | Ruff check + Ruff format check + Mypy type check |
 | **Test job** | pytest with coverage across Python 3.10 and 3.11, ArangoDB 3.12 Docker |
-| **Coverage** | `pytest-cov` reports on `agents/`, `mcp_tools/`, `aql_utils.py` |
+| **Coverage** | `pytest-cov` reports on `mcp_tool_handlers/`, `mcp_tools/`, `aql_utils.py` |
 | **Exclusions** | `test_cluster.py` excluded (requires multi-server deployment) |
 
 ---
@@ -499,7 +499,7 @@ Tools are exposed over **stdio transport**. Clients configure the server in thei
 
 ### 8.2 Adding New Tools
 
-1. Create an agent in `agents/` inheriting from `ArangoAgentBase`
+1. Create an agent in `mcp_tool_handlers/` inheriting from `ArangoAgentBase`
 2. Optionally apply `@handle_arango_errors` decorator for standard error handling
 3. Create tool definitions in `mcp_tools/` using `@mcp_app.tool` with Pydantic `Field` descriptions
 4. Import the new tool module in both `mcp_tools/__init__.py` and `server.py`

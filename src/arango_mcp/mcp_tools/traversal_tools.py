@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import Field
 
-from arango_mcp.agents.graph_traversal_agent import GraphTraversalAgent
+from arango_mcp.mcp_tool_handlers.graph_traversal_agent import GraphTraversalAgent
 from arango_mcp.server import mcp_app
 
 traversal_agent = GraphTraversalAgent()

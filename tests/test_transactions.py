@@ -3,8 +3,8 @@
 import pytest
 from arango.database import StandardDatabase
 
-from arango_mcp.agents.backup_management_agent import BackupManagementAgent
-from arango_mcp.agents.transaction_management_agent import TransactionManagementAgent
+from arango_mcp.mcp_tool_handlers.backup_management_agent import BackupManagementAgent
+from arango_mcp.mcp_tool_handlers.transaction_management_agent import TransactionManagementAgent
 
 # ══════════════════════════════════════════════════════════════════════
 #  Stream Transactions

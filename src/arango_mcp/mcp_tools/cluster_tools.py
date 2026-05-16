@@ -2,7 +2,7 @@ from typing import Any, Dict, Literal, Optional
 
 from pydantic import Field
 
-from arango_mcp.agents.cluster_management_agent import ClusterManagementAgent
+from arango_mcp.mcp_tool_handlers.cluster_management_agent import ClusterManagementAgent
 from arango_mcp.server import mcp_app
 
 cluster_agent = ClusterManagementAgent()

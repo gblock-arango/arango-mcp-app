@@ -2,7 +2,7 @@ from typing import Any, Dict, Optional
 
 from pydantic import Field
 
-from arango_mcp.agents.index_management_agent import IndexManagementAgent
+from arango_mcp.mcp_tool_handlers.index_management_agent import IndexManagementAgent
 from arango_mcp.server import mcp_app
 
 index_agent = IndexManagementAgent()

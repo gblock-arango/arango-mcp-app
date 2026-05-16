@@ -9,7 +9,7 @@ set -euo pipefail
 #   $4–$7 (tunnel/cluster/registry/warehouse); set ``DATABRICKS_SQL_WAREHOUSE_ID`` or pass ``$7``
 #   (no built-in warehouse id). Only profile + warehouse matter for UC grants.
 # Gateway URL + agent URL registries: gateway table is written by arango-gateway-app; agent table
-# by arango-agent (this script publishes after deploy). Dashboard reads both via UC when env URLs are empty.
+# by arango-mcp-app (this script publishes after deploy). Dashboard reads both via UC when env URLs are empty.
 #
 # Genie: when ``GENIE_SPACE_REGISTRY_TABLE`` is non-empty, this script ensures the UC Delta registry
 # table exists and grants the **agent** app SP SELECT+MODIFY (same pattern as arango-dashboard-app).
@@ -266,7 +266,7 @@ if ! ( run_sql_statement "GRANT SELECT ON TABLE ${ARANGO_AGENT_REGISTRY_TABLE} T
   echo "NOTE: GRANT SELECT on ${ARANGO_AGENT_REGISTRY_TABLE} failed (table may not exist yet; deploy script will upsert below)." >&2
 fi
 
-echo "Publishing arango-agent app URL to Unity Catalog (${ARANGO_AGENT_REGISTRY_TABLE})..."
+echo "Publishing arango-mcp-app app URL to Unity Catalog (${ARANGO_AGENT_REGISTRY_TABLE})..."
 _publish_agent_uc_ok=0
 if [[ -n "${PROFILE}" ]]; then
   if ( "${SCRIPT_DIR}/update_arango_agent_registry_uc.sh" \
@@ -282,7 +282,7 @@ else
   fi
 fi
 if [[ "${_publish_agent_uc_ok}" -ne 1 ]]; then
-  echo "NOTE: Agent URL UC publish failed (often permissions or concurrent app startup). Restart arango-agent once, then re-run ./deploy_app.sh or run update_arango_agent_registry_uc.sh manually." >&2
+  echo "NOTE: Agent URL UC publish failed (often permissions or concurrent app startup). Restart arango-mcp-app once, then re-run ./deploy_app.sh or run update_arango_agent_registry_uc.sh manually." >&2
 fi
 
 resolve_genie_registry_deploy_grantee() {
@@ -342,7 +342,7 @@ if [[ -n "${GENIE_SPACE_REGISTRY_TABLE}" ]]; then
 import sys
 sys.path.insert(0, \"${SCRIPT_DIR}/src\")
 from arango_mcp.config import genie_cli_config_dict
-from arango_agent.services.genie_registry import ensure_genie_registry_table
+from arango_dashboard_agent.services.genie_registry import ensure_genie_registry_table
 cfg = genie_cli_config_dict()
 ensure_genie_registry_table(cfg[\"GENIE_SPACE_REGISTRY_TABLE\"], cfg[\"DATABRICKS_SQL_WAREHOUSE_ID\"])
 ")

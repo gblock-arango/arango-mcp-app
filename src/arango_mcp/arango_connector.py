@@ -5,7 +5,7 @@ from typing import AsyncIterator, Optional, Union
 from arango import ArangoClient
 from arango.database import StandardDatabase
 
-from arango_agent.services.gateway_url_registry import effective_gateway_base_url
+from arango_dashboard_agent.services.gateway_url_registry import effective_gateway_base_url
 
 from arango_mcp.config import gateway_resolution_config, settings
 from arango_mcp.gateway_arango_client import GatewayArangoClient

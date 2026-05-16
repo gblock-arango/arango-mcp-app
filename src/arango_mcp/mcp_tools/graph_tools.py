@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
-from arango_mcp.agents.graph_management_agent import GraphManagementAgent
+from arango_mcp.mcp_tool_handlers.graph_management_agent import GraphManagementAgent
 from arango_mcp.server import mcp_app
 
 graph_agent = GraphManagementAgent()

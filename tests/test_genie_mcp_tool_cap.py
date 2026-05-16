@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from arango_agent.services import genie_mcp_orchestrator as orch
+from arango_dashboard_agent.services import genie_mcp_orchestrator as orch
 
 
 def test_tools_for_openai_respects_hard_cap() -> None:

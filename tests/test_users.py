@@ -6,7 +6,7 @@ import uuid
 import pytest
 from arango.database import StandardDatabase
 
-from arango_mcp.agents.user_management_agent import UserManagementAgent
+from arango_mcp.mcp_tool_handlers.user_management_agent import UserManagementAgent
 
 
 def _unique_user():

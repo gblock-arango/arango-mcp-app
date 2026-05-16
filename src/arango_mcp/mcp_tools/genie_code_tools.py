@@ -14,9 +14,9 @@ from typing import Any
 import anyio
 from pydantic import Field
 
-from arango_agent.services.databricks_app_http_auth import config_with_inbound_bearer
-from arango_agent.services.gateway_ada_conversation import ask_gateway_ada_conversation
-from arango_agent.services.genie_mcp_orchestrator import ask_genie_mcp_conversation
+from arango_dashboard_agent.services.databricks_app_http_auth import config_with_inbound_bearer
+from arango_dashboard_agent.services.gateway_ada_conversation import ask_gateway_ada_conversation
+from arango_dashboard_agent.services.genie_mcp_orchestrator import ask_genie_mcp_conversation
 from arango_mcp.config import flask_app_config, settings
 from arango_mcp.genie_code_mcp import mcp_genie_code_app
 
