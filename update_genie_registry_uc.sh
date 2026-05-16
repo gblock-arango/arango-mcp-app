@@ -44,7 +44,7 @@ if [[ -n "${DATABRICKS_CLIENT_ID:-}" && -n "${DATABRICKS_CLIENT_SECRET:-}" ]]; t
   fi
   echo "Genie provision: OAuth M2M (unset DATABRICKS_CONFIG_PROFILE and DATABRICKS_TOKEN for SDK)." >&2
   exec env -u DATABRICKS_CONFIG_PROFILE -u DATABRICKS_TOKEN \
-    "${PYTHON}" "${SCRIPT_DIR}/src/provision_genie_uc.py"
+    "${PYTHON}" "${SCRIPT_DIR}/src/arango_dashboard_agent/provision_genie_uc.py"
 fi
 
 if [[ -n "${DATABRICKS_HOST:-}" && -n "${DATABRICKS_TOKEN:-}" ]]; then
@@ -53,10 +53,10 @@ if [[ -n "${DATABRICKS_HOST:-}" && -n "${DATABRICKS_TOKEN:-}" ]]; then
     export DATABRICKS_CONFIG_PROFILE="${PROFILE}"
   fi
   exec env -u DATABRICKS_CLIENT_ID -u DATABRICKS_CLIENT_SECRET \
-    "${PYTHON}" "${SCRIPT_DIR}/src/provision_genie_uc.py"
+    "${PYTHON}" "${SCRIPT_DIR}/src/arango_dashboard_agent/provision_genie_uc.py"
 fi
 
 if [[ -n "${PROFILE}" ]]; then
   export DATABRICKS_CONFIG_PROFILE="${PROFILE}"
 fi
-exec "${PYTHON}" "${SCRIPT_DIR}/src/provision_genie_uc.py"
+exec "${PYTHON}" "${SCRIPT_DIR}/src/arango_dashboard_agent/provision_genie_uc.py"

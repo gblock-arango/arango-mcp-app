@@ -302,7 +302,7 @@ def flask_app_config(app: AppSettings | None = None) -> dict[str, Any]:
 
 
 def genie_cli_config_dict() -> dict[str, Any]:
-    """Config dict for ``src/provision_genie_uc.py`` / deploy scripts (uses process env via ``settings``)."""
+    """Config dict for ``arango_dashboard_agent.provision_genie_uc`` / deploy scripts (uses process env via ``settings``)."""
     return flask_app_config(settings)
 
 

@@ -599,7 +599,7 @@ def reconcile_genie_uc_registry_for_dashboard_app(app: Any) -> dict[str, Any]:
 
 def provision_genie_space_cli() -> int:
     """
-    Entry point for ``src/provision_genie_uc.py`` / ``update_genie_registry_uc.sh``.
+    Entry point for ``arango_dashboard_agent.provision_genie_uc`` / ``update_genie_registry_uc.sh``.
 
     Always runs idempotent provision (ignores ``GENIE_AUTO_PROVISION``).
     """
