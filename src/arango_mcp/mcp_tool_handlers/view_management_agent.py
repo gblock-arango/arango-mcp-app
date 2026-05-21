@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Dict, Optional
 
-)
+from arango.exceptions import ViewGetError, ViewUpdateError
 
 from arango_mcp.mcp_tool_handlers.agent_base import ArangoAgentBase
 from arango_mcp.arango_connector import arango_connector

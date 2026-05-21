@@ -32,8 +32,71 @@ def _strip_bearer(value: str) -> str:
     return v
 
 
+def _cli_auth_token_cmd() -> list[str]:
+    cmd = ["databricks", "auth", "token", "-o", "json"]
+    profile = (os.environ.get("DATABRICKS_CONFIG_PROFILE") or "").strip()
+    if profile:
+        cmd.extend(["-p", profile])
+    return cmd
+
+
+def _cli_u2m_token() -> tuple[str, str]:
+    """OAuth U2M token from ``databricks auth token`` (preferred for *.databricksapps.com)."""
+    try:
+        proc = subprocess.run(
+            _cli_auth_token_cmd(),
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        if proc.returncode != 0 or not proc.stdout.strip():
+            if proc.stderr.strip():
+                print(f"Note: databricks auth token failed: {proc.stderr.strip()[:300]}")
+            return "", ""
+        data = json.loads(proc.stdout)
+        tok = _strip_bearer(str(data.get("access_token") or data.get("token") or ""))
+        label = "databricks auth token -o json"
+        if profile := (os.environ.get("DATABRICKS_CONFIG_PROFILE") or "").strip():
+            label += f" (profile={profile})"
+        return tok, label
+    except (OSError, json.JSONDecodeError, subprocess.TimeoutExpired) as exc:
+        print(f"Note: databricks auth token failed: {exc}")
+        return "", ""
+
+
+def _sdk_token() -> tuple[str, str]:
+    try:
+        from databricks.sdk import WorkspaceClient
+
+        ws = WorkspaceClient()
+        auth = ws.config.authenticate() or {}
+        for key, val in auth.items():
+            if str(key).lower() == "authorization" and val:
+                auth_type = str(getattr(ws.config, "auth_type", None) or "").strip().lower()
+                label = "WorkspaceClient.config.authenticate()"
+                if auth_type:
+                    label += f" (auth_type={auth_type})"
+                return _strip_bearer(str(val)), label
+    except Exception as exc:
+        print(f"Note: SDK authenticate() failed: {exc}")
+    return "", ""
+
+
+def _token_works_on_app(*, app_url: str, token: str) -> bool:
+    if not token:
+        return False
+    code, _ = _get(
+        f"{app_url.rstrip('/')}/api/health",
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=15.0,
+    )
+    return code == 200
+
+
 def resolve_bearer_token(
     *,
+    app_url: str,
     env_token: str,
     prefer_sdk: bool,
     app_name: str,
@@ -42,47 +105,30 @@ def resolve_bearer_token(
     """Return ``(token, source_label)`` for Databricks Apps HTTP auth.
 
     Apps expect OAuth U2M tokens (``databricks auth login`` / ``databricks auth token``),
-    not arbitrary legacy PATs in ``DATABRICKS_TOKEN``. See
+    not workspace PATs in ``DATABRICKS_TOKEN``. See
     https://docs.databricks.com/aws/en/dev-tools/databricks-apps/connect-local
+
+    Tries candidates in order and returns the first token that passes ``GET /api/health``.
     """
     candidates: list[tuple[str, str]] = []
 
-    if prefer_sdk:
-        try:
-            from databricks.sdk import WorkspaceClient
-
-            ws = WorkspaceClient()
-            auth = ws.config.authenticate() or {}
-            for key, val in auth.items():
-                if str(key).lower() == "authorization" and val:
-                    candidates.append((_strip_bearer(str(val)), "WorkspaceClient.config.authenticate()"))
-                    break
-        except Exception as exc:
-            print(f"Note: SDK authenticate() failed: {exc}")
+    cli_tok, cli_src = _cli_u2m_token()
+    if cli_tok:
+        candidates.append((cli_tok, cli_src))
 
     if env_token:
         candidates.append((_strip_bearer(env_token), "DATABRICKS_TOKEN env"))
 
-    try:
-        proc = subprocess.run(
-            ["databricks", "auth", "token", "-o", "json"],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=False,
-        )
-        if proc.returncode == 0 and proc.stdout.strip():
-            data = json.loads(proc.stdout)
-            tok = _strip_bearer(str(data.get("access_token") or data.get("token") or ""))
-            if tok:
-                candidates.append((tok, "databricks auth token -o json"))
-    except (OSError, json.JSONDecodeError, subprocess.TimeoutExpired) as exc:
-        print(f"Note: databricks auth token failed: {exc}")
+    sdk_tok, sdk_src = _sdk_token()
+    if sdk_tok:
+        if prefer_sdk:
+            candidates.insert(0, (sdk_tok, sdk_src))
+        else:
+            candidates.append((sdk_tok, sdk_src))
 
     if not candidates:
         return "", "none"
 
-    # De-dupe while preserving order
     seen: set[str] = set()
     unique: list[tuple[str, str]] = []
     for tok, src in candidates:
@@ -90,8 +136,17 @@ def resolve_bearer_token(
             seen.add(tok)
             unique.append((tok, src))
 
+    for tok, src in unique:
+        if _token_works_on_app(app_url=app_url, token=tok):
+            return tok, src
+
     if not try_audience_exchange or not app_name:
-        return unique[0]
+        tok, src = unique[0]
+        print(
+            f"Note: no token passed GET /api/health on {app_url}; using {src} anyway. "
+            "For PAT profiles run: databricks auth login --host <workspace-url> then re-run."
+        )
+        return tok, src
 
     host = (os.environ.get("DATABRICKS_HOST") or os.environ.get("DATABRICKS_WORKSPACE_ORIGIN") or "").strip()
     if not host:
@@ -118,15 +173,34 @@ def resolve_bearer_token(
     if not audience:
         return unique[0]
 
-    subject, subject_src = unique[0]
-    exchanged = _exchange_token_for_app_audience(
-        workspace_host=host,
-        subject_token=subject,
-        app_oauth_client_id=audience,
+    for subject, subject_src in unique:
+        exchanged = _exchange_token_for_app_audience(
+            workspace_host=host,
+            subject_token=subject,
+            app_oauth_client_id=audience,
+        )
+        if exchanged and _token_works_on_app(app_url=app_url, token=exchanged):
+            return exchanged, (
+                f"OIDC token exchange (audience={audience[:8]}…, subject from {subject_src})"
+            )
+
+    tok, src = unique[0]
+    print(
+        f"Note: audience token exchange did not yield a working app token; using {src}. "
+        "Run: databricks auth login --host <workspace-url> && databricks auth token"
     )
-    if exchanged:
-        return exchanged, f"OIDC token exchange (audience={audience[:8]}…, subject from {subject_src})"
-    return unique[0]
+    return tok, src
+
+
+def _subject_token_types_for_exchange(subject_token: str) -> list[str]:
+    """Notebook/PAT exchange types per Databricks Apps connect-local docs."""
+    # JWT-shaped U2M tokens from ``databricks auth token`` work as access_token subjects.
+    if subject_token.count(".") >= 2:
+        return [
+            "urn:databricks:params:oauth:token-type:access_token",
+            "urn:databricks:params:oauth:token-type:personal-access-token",
+        ]
+    return ["urn:databricks:params:oauth:token-type:personal-access-token"]
 
 
 def _exchange_token_for_app_audience(
@@ -135,35 +209,42 @@ def _exchange_token_for_app_audience(
     subject_token: str,
     app_oauth_client_id: str,
 ) -> str:
-    """Audience-scoped token for a specific app (notebook / app-to-app pattern)."""
+    """Audience-scoped token for a specific app (notebook / PAT → app OAuth pattern)."""
     url = f"{workspace_host.rstrip('/')}/oidc/v1/token"
-    body = urllib.parse.urlencode(
-        {
-            "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
-            "subject_token": subject_token,
-            "subject_token_type": "urn:databricks:params:oauth:token-type:access_token",
-            "requested_token_type": "urn:ietf:params:oauth:token-type:access_token",
-            "scope": "all-apis",
-            "audience": app_oauth_client_id,
-        }
-    ).encode("utf-8")
-    req = urllib.request.Request(
-        url,
-        data=body,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        err_body = e.read().decode("utf-8", errors="replace")[:400]
-        print(f"Note: audience token exchange HTTP {e.code}: {err_body}")
-        return ""
-    except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
-        print(f"Note: audience token exchange failed: {exc}")
-        return ""
-    return _strip_bearer(str(data.get("access_token") or ""))
+    for subject_token_type in _subject_token_types_for_exchange(subject_token):
+        body = urllib.parse.urlencode(
+            {
+                "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
+                "subject_token": subject_token,
+                "subject_token_type": subject_token_type,
+                "requested_token_type": "urn:ietf:params:oauth:token-type:access_token",
+                "scope": "all-apis",
+                "audience": app_oauth_client_id,
+            }
+        ).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8", errors="replace")[:400]
+            print(
+                f"Note: audience token exchange HTTP {e.code} "
+                f"(subject_token_type={subject_token_type.split(':')[-1]}): {err_body}"
+            )
+            continue
+        except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
+            print(f"Note: audience token exchange failed: {exc}")
+            continue
+        tok = _strip_bearer(str(data.get("access_token") or ""))
+        if tok:
+            return tok
+    return ""
 
 
 def _print_exception_chain(exc: BaseException, *, limit: int = 8) -> None:
@@ -426,8 +507,8 @@ def main() -> int:
     p.add_argument(
         "--sdk-auth",
         action="store_true",
-        default=True,
-        help="Prefer WorkspaceClient / databricks auth token over raw DATABRICKS_TOKEN (default: on)",
+        default=False,
+        help="Try WorkspaceClient token before DATABRICKS_TOKEN (default: off; PAT profiles need U2M)",
     )
     p.add_argument(
         "--no-sdk-auth",
@@ -438,8 +519,8 @@ def main() -> int:
     p.add_argument(
         "--audience-exchange",
         action="store_true",
-        default=True,
-        help="If SDK/U2M token fails, try OIDC token exchange scoped to the app (default: on)",
+        default=False,
+        help="If no token passes /api/health, try OIDC token exchange scoped to the app (default: off)",
     )
     p.add_argument(
         "--no-audience-exchange",
@@ -458,6 +539,7 @@ def main() -> int:
         return 2
 
     token, token_src = resolve_bearer_token(
+        app_url=args.app_url,
         env_token=args.token,
         prefer_sdk=args.sdk_auth,
         app_name=args.app_name,
