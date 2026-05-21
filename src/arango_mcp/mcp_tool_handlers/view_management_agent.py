@@ -1,13 +1,6 @@
 import logging
 from typing import Any, Dict, Optional
 
-from arango.exceptions import (
-    ArangoServerError,
-    ViewCreateError,
-    ViewDeleteError,
-    ViewGetError,
-    ViewListError,
-    ViewUpdateError,
 )
 
 from arango_mcp.mcp_tool_handlers.agent_base import ArangoAgentBase
@@ -51,15 +44,15 @@ class ViewManagementAgent(ArangoAgentBase):
                 )
                 return False
             raise
-        except ArangoServerError as e:
-            # Some ArangoDB versions might throw a more generic ArangoServerError for not found
+        except GatewayAPIError as e:
+            # Some ArangoDB versions might throw a more generic GatewayAPIError for not found
             if e.error_code in [1203, 1207]:
                 logger.debug(
-                    f"_view_exists: View '{view_name}' not found (ArangoServerError code {e.error_code})."
+                    f"_view_exists: View '{view_name}' not found (GatewayAPIError code {e.error_code})."
                 )
                 return False
             logger.warning(
-                f"_view_exists: Unexpected ArangoServerError for view '{view_name}' (code: {e.error_code}): {e.error_message}",
+                f"_view_exists: Unexpected GatewayAPIError for view '{view_name}' (code: {e.error_code}): {e.error_message}",
                 exc_info=True,
             )
             raise
@@ -222,12 +215,12 @@ class ViewManagementAgent(ArangoAgentBase):
 
         # Catching specific ArangoDB errors first
         except (
-            ViewListError,
-            ViewCreateError,
-            ViewDeleteError,
+            GatewayAPIError,
+            GatewayAPIError,
+            GatewayAPIError,
             ViewGetError,
             ViewUpdateError,
-            ArangoServerError,
+            GatewayAPIError,
             GatewayAPIError,
         ) as e:
             logger.error(

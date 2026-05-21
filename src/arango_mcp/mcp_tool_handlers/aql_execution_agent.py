@@ -1,13 +1,9 @@
 import logging
 from typing import Any, Dict, List, Optional
 
-from arango.exceptions import (
-    AQLQueryExecuteError,
-    AQLQueryExplainError,
-    AQLQueryValidateError,
-    ArangoServerError,
 )
 
+from arango_mcp.gateway_database import GatewayAPIError
 from arango_mcp.mcp_tool_handlers.agent_base import ArangoAgentBase
 from arango_mcp.arango_connector import arango_connector
 
@@ -61,15 +57,15 @@ class AQLExecutionAgent(ArangoAgentBase):
             logger.info(f"AQLExecutionAgent: Query successful, returned {len(results)} documents.")
             return response
 
-        except AQLQueryExecuteError as e:
+        except GatewayAPIError as e:
             logger.error(f"AQLExecutionAgent: AQL execution error in DB '{database_name}': {e}")
             return {
                 "error": f"AQL Execution Error: {e.error_message}",
                 "error_code": e.error_code,
                 "details": str(e),
             }
-        except ArangoServerError as e:  # Catch other server errors like DB not found
-            logger.error(f"AQLExecutionAgent: ArangoServerError in DB '{database_name}': {e}")
+        except GatewayAPIError as e:  # Catch other server errors like DB not found
+            logger.error(f"AQLExecutionAgent: GatewayAPIError in DB '{database_name}': {e}")
             return {
                 "error": f"ArangoDB Server Error: {e.error_message}",
                 "error_code": e.error_code,

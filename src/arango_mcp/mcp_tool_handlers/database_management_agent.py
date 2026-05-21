@@ -1,13 +1,9 @@
 import logging
 from typing import Any, Dict, Optional
 
-from arango.exceptions import (
-    ArangoServerError,
-    DatabaseCreateError,
-    DatabaseDeleteError,
-    DatabaseListError,
 )
 
+from arango_mcp.gateway_database import GatewayAPIError
 from arango_mcp.mcp_tool_handlers.agent_base import ArangoAgentBase
 from arango_mcp.arango_connector import arango_connector
 
@@ -62,10 +58,10 @@ class DatabaseManagementAgent(ArangoAgentBase):
                 return {"error": f"Unknown database operation: {operation}"}
 
         except (
-            DatabaseListError,
-            DatabaseCreateError,
-            DatabaseDeleteError,
-            ArangoServerError,
+            GatewayAPIError,
+            GatewayAPIError,
+            GatewayAPIError,
+            GatewayAPIError,
         ) as e:
             logger.error(
                 f"ArangoDB database operation error (Op: {operation}, DB Param: {db_name_param}): {e}"

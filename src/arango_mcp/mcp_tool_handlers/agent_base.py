@@ -3,7 +3,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
-from arango.exceptions import ArangoServerError
+from arango_mcp.gateway_database import GatewayAPIError
 
 
 def handle_arango_errors(
@@ -11,18 +11,8 @@ def handle_arango_errors(
     error_label: str = "ArangoDB",
     specific_exceptions: tuple[type[Exception], ...] = (),
 ):
-    """Decorator that wraps an agent method with standard ArangoDB error handling.
-
-    Catches specific ArangoDB exceptions first (with error_label prefix),
-    then ArangoServerError, then any unexpected Exception. Returns a
-    standardized error dict in all cases.
-
-    Args:
-        agent_name: Name used in log messages (e.g. "CollectionManagementAgent").
-        error_label: Prefix for the error message (e.g. "ArangoDB Collection").
-        specific_exceptions: Tuple of exception classes to catch before ArangoServerError.
-    """
-    all_exceptions = specific_exceptions + (ArangoServerError,)
+    """Decorator that wraps an agent method with standard Arango/gateway error handling."""
+    all_exceptions = specific_exceptions + (GatewayAPIError,)
 
     def decorator(func):
         @functools.wraps(func)

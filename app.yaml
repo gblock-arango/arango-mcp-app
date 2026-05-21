@@ -45,6 +45,15 @@ env:
     description: "Default Arango database name when using direct (non-gateway) settings"
     value: "_system"
 
+  # --- AOE OntoExtract MCP → arango-workflow-app (HTTP via /api/workflow/ontoextract/v1 BFF) ---
+  - name: ARANGO_WORKFLOW_APP_BASE_URL
+    description: >-
+      Optional override for arango-workflow-app URL. When empty, resolved from ARANGO_WORKFLOW_REGISTRY_TABLE.
+    value: ""
+  - name: ARANGO_WORKFLOW_REGISTRY_TABLE
+    description: "UC Delta table where arango-workflow-app publishes base_url (catalog.schema.table)"
+    value: "workspace.default.arango_workflow_registry"
+
   # --- Genie (spaces, UC registry, auto-provision; safe defaults for most installs) ---
   - name: GENIE_SPACE_TITLE
     description: "Title for auto-provisioned Genie space"
@@ -143,4 +152,8 @@ resources:
   - name: arango-gateway-app-invoke
     app:
       name: arango-gateway-app
+      permission: CAN_USE
+  - name: arango-workflow-app-invoke
+    app:
+      name: arango-workflow-app
       permission: CAN_USE

@@ -133,6 +133,7 @@ class ServerSettings(BaseSettings):
 
 _DEFAULT_GENIE_SPACE_REGISTRY_TABLE = "workspace.default.genie_space_registry"
 _DEFAULT_ARANGO_AGENT_REGISTRY_TABLE = "workspace.default.arango_agent_registry"
+_DEFAULT_ARANGO_WORKFLOW_REGISTRY_TABLE = "workspace.default.arango_workflow_registry"
 
 
 class AppSettings(BaseSettings):
@@ -196,6 +197,15 @@ class AppSettings(BaseSettings):
     arango_agent_registry_auto_create: bool = Field(
         default=True,
         description="When true, app startup upserts this app's URL into ARANGO_AGENT_REGISTRY_TABLE; env: ARANGO_AGENT_REGISTRY_AUTO_CREATE",
+    )
+
+    arango_workflow_app_base_url: str = Field(
+        default="",
+        description="Optional override for arango-workflow-app URL; env: ARANGO_WORKFLOW_APP_BASE_URL",
+    )
+    arango_workflow_registry_table: str = Field(
+        default=_DEFAULT_ARANGO_WORKFLOW_REGISTRY_TABLE,
+        description="UC table where arango-workflow-app publishes base_url; env: ARANGO_WORKFLOW_REGISTRY_TABLE",
     )
 
     mcp_cors_allow_origins: str = Field(
@@ -288,6 +298,8 @@ def flask_app_config(app: AppSettings | None = None) -> dict[str, Any]:
         "GENIE_MESSAGE_TIMEOUT_SECONDS": s.genie_message_timeout_seconds,
         "ARANGO_AGENT_REGISTRY_TABLE": s.arango_agent_registry_table,
         "ARANGO_AGENT_REGISTRY_AUTO_CREATE": s.arango_agent_registry_auto_create,
+        "ARANGO_WORKFLOW_APP_BASE_URL": (s.arango_workflow_app_base_url or "").strip(),
+        "ARANGO_WORKFLOW_REGISTRY_TABLE": s.arango_workflow_registry_table,
         "MCP_CORS_ALLOW_ORIGINS": s.mcp_cors_allow_origins,
         "ARANGO_CONVERSATION_URL": (s.arango_conversation_url or "").strip(),
         "ARANGO_CONVERSATION_TIMEOUT_SECONDS": s.arango_conversation_timeout_seconds,

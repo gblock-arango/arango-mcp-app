@@ -1,8 +1,8 @@
 import logging
 from typing import Any, Dict, Optional
 
-from arango.exceptions import AQLQueryExecuteError, ArangoServerError
 
+from arango_mcp.gateway_database import GatewayAPIError
 from arango_mcp.mcp_tool_handlers.agent_base import ArangoAgentBase
 from arango_mcp.aql_utils import validate_aql_identifier, validate_aql_identifiers
 from arango_mcp.arango_connector import arango_connector
@@ -38,13 +38,13 @@ class GraphTraversalAgent(ArangoAgentBase):
             else:
                 return {"error": f"Unknown traversal operation: {operation}"}
 
-        except AQLQueryExecuteError as e:
+        except GatewayAPIError as e:
             logger.error(f"GraphTraversalAgent: AQL error - {e}")
             return {
                 "error": f"AQL Execution Error: {e.error_message}",
                 "error_code": e.error_code,
             }
-        except ArangoServerError as e:
+        except GatewayAPIError as e:
             logger.error(f"GraphTraversalAgent: ArangoDB error - {e}")
             return {
                 "error": f"ArangoDB Error: {e.error_message if hasattr(e, 'error_message') else str(e)}"

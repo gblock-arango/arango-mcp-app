@@ -1,4 +1,4 @@
-"""HTTP MCP surfaces: Genie Code ``/mcp`` and full catalog ``/mcp/internal``.
+"""HTTP MCP surfaces: Genie Code ``/mcp``, full catalog ``/mcp/internal``, AOE ``/mcp/aoe``.
 
 Uses the official MCP Python client against an in-process ASGI app (no deployed Databricks App).
 """
@@ -16,8 +16,16 @@ from mcp.client.streamable_http import streamable_http_client
 from starlette.applications import Starlette
 from starlette.routing import Mount
 
+from aoe_ontoextract_mcp.server import mcp_aoe_app
 from arango_mcp.genie_code_mcp import mcp_genie_code_app
 from arango_mcp.server import mcp_app
+
+AOE_HTTP_TOOL_NAMES = {
+    "aoe_workflow_health",
+    "aoe_list_ontology_library",
+    "aoe_get_ontology_registry_entry",
+    "aoe_workflow_api",
+}
 
 GENIE_TOOL_NAMES = {
     "arango-graph-machine-learning",
@@ -105,8 +113,43 @@ async def test_internal_mcp_initialize_and_list_tools(_patch_arango_connect) -> 
     assert any(t.name == "list-collections" for t in listed.tools)
 
 
+@asynccontextmanager
+async def _aoe_mcp_client() -> AsyncIterator[tuple[str, httpx.AsyncClient]]:
+    inner = mcp_aoe_app.streamable_http_app()
+    starlette_app = Starlette(routes=[Mount("/mcp/aoe", app=inner)])
+    transport = httpx.ASGITransport(app=starlette_app)
+    http_client = httpx.AsyncClient(transport=transport, base_url="http://testserver")
+
+    async with (
+        mcp_aoe_app.session_manager.run(),
+        starlette_app.router.lifespan_context(starlette_app),
+        http_client,
+    ):
+        yield "http://testserver/mcp/aoe/", http_client
+
+
+@pytest.mark.mcp_http
+async def test_aoe_mcp_initialize_and_list_tools() -> None:
+    """AOE HTTP-bridge MCP surface lists the expected tool names."""
+    async with _aoe_mcp_client() as (url, http_client):
+        async with (
+            streamable_http_client(url, http_client=http_client) as (read, write, _),
+            ClientSession(read, write) as session,
+        ):
+            await session.initialize()
+            listed = await session.list_tools()
+    names = {t.name for t in listed.tools}
+    assert names == AOE_HTTP_TOOL_NAMES
+
+
 @pytest.mark.mcp_http
 def test_genie_code_tool_manager_matches_expected_names() -> None:
     """Fast registration sanity check without HTTP."""
     names = {t.name for t in mcp_genie_code_app._tool_manager.list_tools()}
     assert names == GENIE_TOOL_NAMES
+
+
+@pytest.mark.mcp_http
+def test_aoe_tool_manager_matches_expected_names() -> None:
+    names = {t.name for t in mcp_aoe_app._tool_manager.list_tools()}
+    assert names == AOE_HTTP_TOOL_NAMES

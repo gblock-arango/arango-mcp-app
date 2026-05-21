@@ -38,6 +38,8 @@ def health():
 def mcp_diagnostics():
     """Runtime MCP inventory: Genie Code surface (``/mcp``) vs full catalog (``/mcp/internal``) + manifests."""
     try:
+        from aoe_ontoextract_mcp.config import workflow_app_base_url
+        from aoe_ontoextract_mcp.server import mcp_aoe_app
         from arango_mcp.genie_code_mcp import mcp_genie_code_app
         from arango_mcp.server import mcp_app as mcp_full_app
         from arango_mcp.tool_registries import genie_code_allowed_tool_names, load_manifest
@@ -47,6 +49,7 @@ def mcp_diagnostics():
 
         genie_names = tool_names(mcp_genie_code_app)
         full_names = tool_names(mcp_full_app)
+        aoe_names = tool_names(mcp_aoe_app)
         max_genie_tools = int(current_app.config.get("GENIEMCP_MAX_TOOLS") or 20)
         genie_allowed = genie_code_allowed_tool_names(max_tools=max_genie_tools)
         return jsonify(
@@ -66,6 +69,12 @@ def mcp_diagnostics():
                     "tool_names_preview": full_names[:80],
                     "tool_names_truncated": max(0, len(full_names) - 80),
                     "manifest": load_manifest("full_catalog"),
+                },
+                "aoe_ontoextract_mcp": {
+                    "http_path": "/mcp/aoe",
+                    "tool_count": len(aoe_names),
+                    "tool_names": aoe_names,
+                    "workflow_app_base_url_effective": workflow_app_base_url() or None,
                 },
                 "migration_pool_manifest": load_manifest("migration_pool"),
             }

@@ -1,15 +1,9 @@
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from arango.exceptions import (
-    ArangoServerError,
-    TransactionAbortError,
-    TransactionCommitError,
-    TransactionInitError,
-    TransactionListError,
-    TransactionStatusError,
 )
 
+from arango_mcp.gateway_database import GatewayAPIError
 from arango_mcp.mcp_tool_handlers.agent_base import ArangoAgentBase
 from arango_mcp.arango_connector import arango_connector
 from arango_mcp.config import settings
@@ -51,16 +45,16 @@ class TransactionManagementAgent(ArangoAgentBase):
 
         except (
             TransactionInitError,
-            TransactionCommitError,
-            TransactionAbortError,
-            TransactionStatusError,
+            GatewayAPIError,
+            GatewayAPIError,
+            GatewayAPIError,
             TransactionListError,
         ) as e:
             logger.error(f"TransactionManagementAgent: Transaction error - {e}")
             return {
                 "error": f"Transaction Error: {e.error_message if hasattr(e, 'error_message') else str(e)}"
             }
-        except ArangoServerError as e:
+        except GatewayAPIError as e:
             logger.error(f"TransactionManagementAgent: ArangoDB error - {e}")
             return {
                 "error": f"ArangoDB Error: {e.error_message if hasattr(e, 'error_message') else str(e)}"

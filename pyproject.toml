@@ -9,11 +9,11 @@ package-mode = true
 packages = [
     { include = "arango_mcp", from = "src" },
     { include = "arango_dashboard_agent", from = "src" },
+    { include = "aoe_ontoextract_mcp", from = "src" },
 ]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-python-arango = "^8.1.0"
 mcp = "^1.0.0"
 fastmcp = "^0.2.0"
 pydantic = "^2.0.0"
@@ -75,6 +75,7 @@ ignore = [
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+norecursedirs = ["aoe_ontoextract_mcp_staged"]
 asyncio_mode = "auto"
 markers = [
     "cluster: tests requiring a cluster deployment (deselect with '-m not cluster')",

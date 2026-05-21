@@ -8,6 +8,8 @@ The **dashboard** (`arango-dashboard-app`) proxies chat to this app; **Arango cl
 
 This repo holds `app.yaml`, `deploy_app.sh`, and Python under `src/` (`arango_dashboard_agent/` = Flask HTTP, `arango_mcp/` = MCP + tools).
 
+**Staged (not deployed):** `src/aoe_ontoextract_mcp/app/mcp/` — OntoExtract ontology MCP tools moved from `arango-workflow-app`; same `app.mcp.*` imports, not registered on `mcp_app` yet. See that folder’s README.
+
 ---
 
 ## Quick start (deploy to Databricks)

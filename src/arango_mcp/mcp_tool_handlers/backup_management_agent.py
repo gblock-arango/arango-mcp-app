@@ -1,8 +1,8 @@
 import logging
 from typing import Any, Dict, Optional
 
-from arango.exceptions import ArangoServerError
 
+from arango_mcp.gateway_database import GatewayAPIError
 from arango_mcp.mcp_tool_handlers.agent_base import ArangoAgentBase
 from arango_mcp.arango_connector import arango_connector
 
@@ -37,7 +37,7 @@ class BackupManagementAgent(ArangoAgentBase):
             else:
                 return {"error": f"Unknown backup operation: {operation}"}
 
-        except ArangoServerError as e:
+        except GatewayAPIError as e:
             msg = e.error_message if hasattr(e, "error_message") else str(e)
             msg_lower = msg.lower()
             is_enterprise_only = (

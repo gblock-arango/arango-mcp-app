@@ -1,6 +1,6 @@
-"""ASGI entrypoint: Genie Code MCP at ``/mcp`` + full catalog at ``/mcp/internal`` + Flask (``/api``).
+"""ASGI entrypoint: Genie Code MCP at ``/mcp`` + full catalog at ``/mcp/internal`` + AOE at ``/mcp/aoe`` + Flask.
 
-Run with Gunicorn’s Uvicorn worker (see ``app.yaml``) so Starlette lifespan runs and both MCP
+Run with Gunicorn’s Uvicorn worker (see ``app.yaml``) so Starlette lifespan runs and all MCP
 session managers stay active.
 
 When ``MCP_CORS_ALLOW_ORIGINS`` is unset, MCP routes enable CORS for the workspace origin parsed
@@ -32,6 +32,7 @@ from starlette.types import ASGIApp
 from arango_dashboard_agent.services.databricks_app_http_auth import McpInboundBearerMiddleware
 from arango_dashboard_agent.webapp import create_app
 from arango_mcp.config import settings
+from aoe_ontoextract_mcp.server import mcp_aoe_app
 from arango_mcp.genie_code_mcp import mcp_genie_code_app
 from arango_mcp.server import mcp_app
 
@@ -47,7 +48,14 @@ class _BrowserFriendlyMcpGet(BaseHTTPMiddleware):
         if request.method != "GET":
             return await call_next(request)
         path = request.url.path
-        if path not in ("/mcp", "/mcp/", "/mcp/internal", "/mcp/internal/"):
+        if path not in (
+            "/mcp",
+            "/mcp/",
+            "/mcp/internal",
+            "/mcp/internal/",
+            "/mcp/aoe",
+            "/mcp/aoe/",
+        ):
             return await call_next(request)
         accept = (request.headers.get("accept") or "").lower()
         if "text/event-stream" in accept:
@@ -67,7 +75,7 @@ class _BrowserFriendlyMcpGet(BaseHTTPMiddleware):
 
 
 class _NormalizeMcpPaths(BaseHTTPMiddleware):
-    """Rewrite bare ``/mcp`` and ``/mcp/internal`` so Starlette ``Mount(.../)`` matches."""
+    """Rewrite bare ``/mcp*`` paths so Starlette ``Mount(.../)`` matches."""
 
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
@@ -80,6 +88,9 @@ class _NormalizeMcpPaths(BaseHTTPMiddleware):
             elif p == "/mcp/internal":
                 request.scope["path"] = "/mcp/internal/"
                 request.scope["raw_path"] = b"/mcp/internal/"
+            elif p == "/mcp/aoe":
+                request.scope["path"] = "/mcp/aoe/"
+                request.scope["raw_path"] = b"/mcp/aoe/"
         return await call_next(request)
 
 
@@ -139,8 +150,10 @@ def _wrap_mcp_cors(inner: ASGIApp) -> ASGIApp:
 
 _genie_inner = mcp_genie_code_app.streamable_http_app()
 _full_inner = mcp_app.streamable_http_app()
+_aoe_inner = mcp_aoe_app.streamable_http_app()
 _mcp_genie_asgi = _wrap_mcp_cors(McpInboundBearerMiddleware(_genie_inner))
 _mcp_full_asgi = _wrap_mcp_cors(McpInboundBearerMiddleware(_full_inner))
+_mcp_aoe_asgi = _wrap_mcp_cors(McpInboundBearerMiddleware(_aoe_inner))
 
 
 @asynccontextmanager
@@ -149,6 +162,7 @@ async def _lifespan(_: Starlette) -> AsyncIterator[None]:
     async with AsyncExitStack() as stack:
         await stack.enter_async_context(mcp_genie_code_app.session_manager.run())
         await stack.enter_async_context(mcp_app.session_manager.run())
+        await stack.enter_async_context(mcp_aoe_app.session_manager.run())
         yield
     set_main_event_loop(None)
 
@@ -157,6 +171,7 @@ _flask = create_app()
 
 app = Starlette(
     routes=[
+        Mount("/mcp/aoe/", app=_mcp_aoe_asgi),
         Mount("/mcp/internal/", app=_mcp_full_asgi),
         Mount("/mcp/", app=_mcp_genie_asgi),
         Mount("/", app=WSGIMiddleware(_flask)),

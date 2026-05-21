@@ -1,8 +1,8 @@
 import logging
 from typing import Any, Dict, Optional
 
-from arango.exceptions import ArangoServerError
 
+from arango_mcp.gateway_database import GatewayAPIError
 from arango_mcp.mcp_tool_handlers.agent_base import ArangoAgentBase
 from arango_mcp.arango_connector import arango_connector
 
@@ -114,7 +114,7 @@ class ClusterManagementAgent(ArangoAgentBase):
             else:
                 return {"error": f"Unknown cluster operation: {operation}"}
 
-        except ArangoServerError as e:
+        except GatewayAPIError as e:
             error_msg = e.error_message if hasattr(e, "error_message") else str(e)
             lower_msg = str(error_msg).lower()
             if any(

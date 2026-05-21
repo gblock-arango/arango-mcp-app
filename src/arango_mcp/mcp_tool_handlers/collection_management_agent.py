@@ -1,14 +1,9 @@
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from arango.exceptions import (
-    CollectionConfigureError,
-    CollectionCreateError,
-    CollectionDeleteError,
-    CollectionListError,
-    CollectionPropertiesError,
 )
 
+from arango_mcp.gateway_database import GatewayAPIError
 from arango_mcp.mcp_tool_handlers.agent_base import ArangoAgentBase, handle_arango_errors
 from arango_mcp.arango_connector import arango_connector
 
@@ -22,10 +17,10 @@ class CollectionManagementAgent(ArangoAgentBase):
         "CollectionManagementAgent",
         "ArangoDB Collection",
         (
-            CollectionListError,
-            CollectionCreateError,
-            CollectionDeleteError,
-            CollectionPropertiesError,
+            GatewayAPIError,
+            GatewayAPIError,
+            GatewayAPIError,
+            GatewayAPIError,
             CollectionConfigureError,
         ),
     )

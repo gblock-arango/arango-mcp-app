@@ -1,8 +1,8 @@
 import logging
 from typing import Any, Dict, List, Optional
 
-from arango.exceptions import AQLQueryExecuteError, ArangoServerError
 
+from arango_mcp.gateway_database import GatewayAPIError
 from arango_mcp.mcp_tool_handlers.agent_base import ArangoAgentBase
 from arango_mcp.aql_utils import validate_aql_identifier, validate_aql_identifiers
 from arango_mcp.arango_connector import arango_connector
@@ -42,13 +42,13 @@ class VectorSearchAgent(ArangoAgentBase):
             else:
                 return {"error": f"Unknown vector operation: {operation}"}
 
-        except AQLQueryExecuteError as e:
+        except GatewayAPIError as e:
             logger.error(f"VectorSearchAgent: AQL error - {e}")
             return {
                 "error": f"AQL Execution Error: {e.error_message}",
                 "error_code": e.error_code,
             }
-        except ArangoServerError as e:
+        except GatewayAPIError as e:
             logger.error(f"VectorSearchAgent: ArangoDB error - {e}")
             return {
                 "error": f"ArangoDB Error: {e.error_message if hasattr(e, 'error_message') else str(e)}"

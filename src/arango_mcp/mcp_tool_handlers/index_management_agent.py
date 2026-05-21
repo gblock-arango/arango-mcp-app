@@ -1,8 +1,8 @@
 import logging
 from typing import Any, Dict, Optional
 
-from arango.exceptions import IndexCreateError, IndexDeleteError, IndexListError
 
+from arango_mcp.gateway_database import GatewayAPIError
 from arango_mcp.mcp_tool_handlers.agent_base import ArangoAgentBase, handle_arango_errors
 from arango_mcp.arango_connector import arango_connector
 
@@ -15,7 +15,7 @@ class IndexManagementAgent(ArangoAgentBase):
     @handle_arango_errors(
         "IndexManagementAgent",
         "ArangoDB Index",
-        (IndexListError, IndexCreateError, IndexDeleteError),
+        (GatewayAPIError, GatewayAPIError, GatewayAPIError),
     )
     async def arun(self, mcp_tool_inputs: Dict[str, Any]) -> Dict[str, Any]:
         operation: str = mcp_tool_inputs.get("operation", "")

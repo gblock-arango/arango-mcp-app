@@ -266,6 +266,12 @@ if ! ( run_sql_statement "GRANT SELECT ON TABLE ${ARANGO_AGENT_REGISTRY_TABLE} T
   echo "NOTE: GRANT SELECT on ${ARANGO_AGENT_REGISTRY_TABLE} failed (table may not exist yet; deploy script will upsert below)." >&2
 fi
 
+ARANGO_WORKFLOW_REGISTRY_TABLE="${ARANGO_WORKFLOW_REGISTRY_TABLE:-workspace.default.arango_workflow_registry}"
+echo "Granting SELECT on workflow URL registry (${ARANGO_WORKFLOW_REGISTRY_TABLE}) to MCP app SP..."
+if ! ( run_sql_statement "GRANT SELECT ON TABLE ${ARANGO_WORKFLOW_REGISTRY_TABLE} TO \`${APP_SERVICE_PRINCIPAL_CLIENT_ID}\`" ); then
+  echo "NOTE: GRANT on ${ARANGO_WORKFLOW_REGISTRY_TABLE} failed (deploy arango-workflow-app once so the table exists)." >&2
+fi
+
 echo "Publishing arango-mcp-app app URL to Unity Catalog (${ARANGO_AGENT_REGISTRY_TABLE})..."
 _publish_agent_uc_ok=0
 if [[ -n "${PROFILE}" ]]; then
