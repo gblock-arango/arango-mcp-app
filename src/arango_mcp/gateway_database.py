@@ -49,6 +49,65 @@ def _q(seg: str) -> str:
     return quote(seg, safe="")
 
 
+def _collection_create_body(name: str, **kwargs: Any) -> Dict[str, Any]:
+    """Map ``python-arango`` ``create_collection`` kwargs to Arango REST body."""
+    opts = dict(kwargs)
+    body: Dict[str, Any] = {"name": name}
+
+    edge = opts.pop("edge", None)
+    if edge is True:
+        body["type"] = 3
+    elif edge is False and "type" not in opts:
+        body["type"] = 2
+
+    if opts.pop("system", False) or opts.pop("is_system", False):
+        body["isSystem"] = True
+
+    sync = opts.pop("sync", None)
+    if sync is None:
+        sync = opts.pop("wait_for_sync", None)
+    if sync is not None:
+        body["waitForSync"] = bool(sync)
+
+    journal_size = opts.pop("journal_size", None)
+    if journal_size is not None:
+        body["journalSize"] = journal_size
+
+    raw_type = opts.pop("type", None)
+    if raw_type is not None:
+        if raw_type in (3, "edge", "edges"):
+            body["type"] = 3
+        elif raw_type in (2, "document", "documents"):
+            body["type"] = 2
+        else:
+            body["type"] = raw_type
+
+    _rest_keys = {
+        "waitForSync",
+        "isSystem",
+        "journalSize",
+        "indexBuckets",
+        "keyOptions",
+        "smartJoinAttribute",
+        "shardKeys",
+        "numberOfShards",
+        "replicationFactor",
+        "writeConcern",
+        "distributeShardsLike",
+        "allowUserKeys",
+        "isDisjoint",
+        "computedValues",
+        "schema",
+    }
+    for key, value in opts.items():
+        if key in _rest_keys:
+            body[key] = value
+        else:
+            logger.debug("create_collection: ignoring non-REST kwarg %r", key)
+
+    return body
+
+
 class GatewayCursor:
     """Minimal cursor over ``result`` batch (extend later for ``hasMore`` / ``id``)."""
 
@@ -495,7 +554,7 @@ class GatewayDatabase:
         return GatewayCollection(self, name)
 
     def create_collection(self, name: str, **kwargs: Any) -> Any:
-        body: Dict[str, Any] = {"name": name, **kwargs}
+        body = _collection_create_body(name, **kwargs)
         res = self._request(
             "POST", f"/_db/{_q(self.name)}/_api/collection", json_body=body
         )
