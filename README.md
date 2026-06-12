@@ -17,7 +17,7 @@ This repo holds `app.yaml`, `deploy_app.sh`, and Python under `src/` (`arango_da
 Prerequisites:
 
 - [Databricks CLI](https://docs.databricks.com/aws/en/dev-tools/cli/) logged into your workspace (`databricks auth login` or a profile).
-- **`DATABRICKS_SQL_WAREHOUSE_ID`** set in the environment or passed as the **7th** argument to `deploy_app.sh` (see script header). Replace the placeholder in `app.yaml` if you copy this repo fresh.
+- **`DATABRICKS_SQL_WAREHOUSE_ID`** set in the environment or passed to `deploy_app.sh` (see script header). Replace the placeholder in `app.yaml` if you copy this repo fresh.
 - **Gateway** deployed once so **`ARANGO_GATEWAY_REGISTRY_TABLE`** has a row (unless you set **`ARANGO_GATEWAY_BASE_URL`** manually).
 
 From this directory:
