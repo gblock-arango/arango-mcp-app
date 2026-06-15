@@ -1,8 +1,6 @@
 import logging
 from typing import Any, Dict, Optional
 
-from arango.exceptions import ViewGetError, ViewUpdateError
-
 from arango_mcp.mcp_tool_handlers.agent_base import ArangoAgentBase
 from arango_mcp.arango_connector import arango_connector
 from arango_mcp.gateway_database import GatewayAPIError
@@ -23,36 +21,15 @@ class ViewManagementAgent(ArangoAgentBase):
             db_instance.view(view_name)  # Attempt to get view properties
             logger.debug(f"_view_exists: View '{view_name}' found.")
             return True
-        except ViewGetError as e:
-            # Error code 1207: view not found
-            # Error code 1203: ERROR_ARANGO_DATA_SOURCE_NOT_FOUND (can also mean view not found)
-            if e.error_code in [1203, 1207]:
-                logger.debug(
-                    f"_view_exists: View '{view_name}' not found (ViewGetError code {e.error_code})."
-                )
-                return False
-            # For other ViewGetErrors (e.g., permission issues), re-raise
-            logger.warning(
-                f"_view_exists: Unexpected ViewGetError for view '{view_name}' (code: {e.error_code}): {e.error_message}",
-                exc_info=True,
-            )
-            raise
         except GatewayAPIError as e:
             if e.error_code in (1203, 1207):
                 logger.debug(
                     f"_view_exists: View '{view_name}' not found (GatewayAPIError code {e.error_code})."
                 )
                 return False
-            raise
-        except GatewayAPIError as e:
-            # Some ArangoDB versions might throw a more generic GatewayAPIError for not found
-            if e.error_code in [1203, 1207]:
-                logger.debug(
-                    f"_view_exists: View '{view_name}' not found (GatewayAPIError code {e.error_code})."
-                )
-                return False
             logger.warning(
-                f"_view_exists: Unexpected GatewayAPIError for view '{view_name}' (code: {e.error_code}): {e.error_message}",
+                f"_view_exists: Unexpected GatewayAPIError for view '{view_name}' "
+                f"(code: {e.error_code}): {e.error_message}",
                 exc_info=True,
             )
             raise
@@ -213,16 +190,7 @@ class ViewManagementAgent(ArangoAgentBase):
             else:
                 return {"error": f"Unknown view operation: {operation}"}
 
-        # Catching specific ArangoDB errors first
-        except (
-            GatewayAPIError,
-            GatewayAPIError,
-            GatewayAPIError,
-            ViewGetError,
-            ViewUpdateError,
-            GatewayAPIError,
-            GatewayAPIError,
-        ) as e:
+        except GatewayAPIError as e:
             logger.error(
                 f"ViewManagementAgent: ArangoDB error - Op: {operation}, DB: {database_name}, View: {view_name}, Error: {e}",
                 exc_info=True,

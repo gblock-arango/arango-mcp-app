@@ -10,6 +10,7 @@ fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
 pip install -q -U pip
+pip install -q -r requirements.txt
 pip install -q -e .
 
 echo "MCP local build ready."

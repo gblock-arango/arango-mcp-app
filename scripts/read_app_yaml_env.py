@@ -7,20 +7,44 @@ import re
 import sys
 from pathlib import Path
 
+_NAME_RE = re.compile(r"^\s*-\s*name:\s*(\S+)\s*$")
+_VALUE_RE = re.compile(
+    r'^\s*value:\s*(?:"([^"]*)"|\'([^\']*)\'|(\S+))\s*$'
+)
+
 
 def iter_app_yaml_env(app_yaml: Path) -> list[tuple[str, str]]:
+    """Parse ``env:`` blocks without regex backtracking (large app.yaml files hang otherwise)."""
     text = app_yaml.read_text(encoding="utf-8")
-    pattern = re.compile(
-        r"-\s*name:\s*(\S+)\s*\n"
-        r"(?:\s+[^\n]+\n)*?"
-        r'\s+value:\s*(?:"([^"]*)"|\'([^\']*)\'|(\S+))',
-        re.MULTILINE,
-    )
     entries: list[tuple[str, str]] = []
-    for m in pattern.finditer(text):
-        name = m.group(1)
-        val = (m.group(2) or m.group(3) or m.group(4) or "").strip()
-        entries.append((name, val))
+    in_env = False
+    current_name: str | None = None
+
+    for line in text.splitlines():
+        if re.match(r"^env:\s*$", line):
+            in_env = True
+            current_name = None
+            continue
+        if in_env and re.match(r"^[a-zA-Z_][\w-]*:\s*$", line) and not line.startswith(" "):
+            break
+
+        if not in_env:
+            continue
+
+        name_m = _NAME_RE.match(line)
+        if name_m:
+            current_name = name_m.group(1)
+            continue
+
+        if current_name is None:
+            continue
+
+        value_m = _VALUE_RE.match(line)
+        if value_m:
+            val = (value_m.group(1) or value_m.group(2) or value_m.group(3) or "").strip()
+            entries.append((current_name, val))
+            current_name = None
+
     return entries
 
 
@@ -48,11 +72,11 @@ def main() -> int:
     if sys.argv[1] == "--export-all":
         import shlex
 
-        for name, val in iter_app_yaml_env(path):
-            print(f"export {name}={shlex.quote(val)}")
+        for env_name, val in iter_app_yaml_env(path):
+            print(f"export {env_name}={shlex.quote(val)}")
         return 0
-    name = sys.argv[1]
-    print(read_app_yaml_value(path, name), end="")
+    env_name = sys.argv[1]
+    print(read_app_yaml_value(path, env_name), end="")
     return 0
 
 

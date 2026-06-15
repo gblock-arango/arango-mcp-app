@@ -1,8 +1,6 @@
 import logging
 from typing import Any, Dict, List, Optional
 
-from arango.exceptions import DocumentReplaceError
-
 from arango_mcp.gateway_database import GatewayAPIError
 from arango_mcp.mcp_tool_handlers.agent_base import ArangoAgentBase, handle_arango_errors
 from arango_mcp.aql_utils import validate_aql_identifier
@@ -14,17 +12,7 @@ logger = logging.getLogger(__name__)
 class DocumentCRUDAgent(ArangoAgentBase):
     """Agent for document CRUD operations."""
 
-    @handle_arango_errors(
-        "DocumentCRUDAgent",
-        "ArangoDB Document",
-        (
-            GatewayAPIError,
-            GatewayAPIError,
-            GatewayAPIError,
-            GatewayAPIError,
-            DocumentReplaceError,
-        ),
-    )
+    @handle_arango_errors("DocumentCRUDAgent", "ArangoDB Document")
     async def arun(self, mcp_tool_inputs: Dict[str, Any]) -> Dict[str, Any]:
         operation: str = mcp_tool_inputs.get("operation", "")
         database_name: Optional[str] = mcp_tool_inputs.get("database_name")

@@ -1,8 +1,6 @@
 import logging
 from typing import Any, Dict, List, Optional
 
-from arango.exceptions import AnalyzerGetError
-
 from arango_mcp.gateway_database import GatewayAPIError
 from arango_mcp.mcp_tool_handlers.agent_base import ArangoAgentBase, handle_arango_errors
 from arango_mcp.arango_connector import arango_connector
@@ -13,11 +11,7 @@ logger = logging.getLogger(__name__)
 class AnalyzerManagementAgent(ArangoAgentBase):
     """Agent for managing ArangoDB text analyzers."""
 
-    @handle_arango_errors(
-        "AnalyzerManagementAgent",
-        "ArangoDB Analyzer",
-        (GatewayAPIError, GatewayAPIError, GatewayAPIError, AnalyzerGetError),
-    )
+    @handle_arango_errors("AnalyzerManagementAgent", "ArangoDB Analyzer")
     async def arun(self, mcp_tool_inputs: Dict[str, Any]) -> Dict[str, Any]:
         operation: str = mcp_tool_inputs.get("operation", "")
         database_name: Optional[str] = mcp_tool_inputs.get("database_name")

@@ -1,8 +1,6 @@
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from arango.exceptions import CollectionConfigureError
-
 from arango_mcp.gateway_database import GatewayAPIError
 from arango_mcp.mcp_tool_handlers.agent_base import ArangoAgentBase, handle_arango_errors
 from arango_mcp.arango_connector import arango_connector
@@ -13,17 +11,7 @@ logger = logging.getLogger(__name__)
 class CollectionManagementAgent(ArangoAgentBase):
     """Agent for managing ArangoDB collections."""
 
-    @handle_arango_errors(
-        "CollectionManagementAgent",
-        "ArangoDB Collection",
-        (
-            GatewayAPIError,
-            GatewayAPIError,
-            GatewayAPIError,
-            GatewayAPIError,
-            CollectionConfigureError,
-        ),
-    )
+    @handle_arango_errors("CollectionManagementAgent", "ArangoDB Collection")
     async def arun(self, mcp_tool_inputs: Dict[str, Any]) -> Dict[str, Any]:
         operation: str = mcp_tool_inputs.get("operation", "")
         database_name: Optional[str] = mcp_tool_inputs.get("database_name")

@@ -1,8 +1,6 @@
 import logging
 from typing import Any, Dict, Optional
 
-from arango.exceptions import UserUpdateError
-
 from arango_mcp.gateway_database import GatewayAPIError
 from arango_mcp.mcp_tool_handlers.agent_base import ArangoAgentBase
 from arango_mcp.arango_connector import arango_connector
@@ -46,17 +44,6 @@ class UserManagementAgent(ArangoAgentBase):
             else:
                 return {"error": f"Unknown user operation: {operation}"}
 
-        except (
-            GatewayAPIError,
-            GatewayAPIError,
-            GatewayAPIError,
-            GatewayAPIError,
-            UserUpdateError,
-        ) as e:
-            logger.error(f"UserManagementAgent: User error - {e}")
-            return {
-                "error": f"User Error: {e.error_message if hasattr(e, 'error_message') else str(e)}"
-            }
         except GatewayAPIError as e:
             logger.error(f"UserManagementAgent: ArangoDB error - {e}")
             return {

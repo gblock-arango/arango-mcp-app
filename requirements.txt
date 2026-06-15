@@ -1,7 +1,7 @@
 # Databricks Apps: pip installs from this file when deploying the app.
+# Gateway mode only — no python-arango (all Arango I/O via arango-gateway-app HTTP).
 # See https://docs.databricks.com/aws/en/dev-tools/databricks-apps/dependencies
 databricks-sdk>=0.36.0
-python-arango>=8.1.0
 mcp>=1.0.0
 fastmcp>=0.2.0
 pydantic>=2.0.0
@@ -9,5 +9,6 @@ pydantic-settings>=2.0.0
 anyio>=4.5.0
 flask>=3.0.0
 gunicorn>=22.0.0
+uvicorn[standard]>=0.31.1
 requests>=2.31.0
 openai>=1.59.0

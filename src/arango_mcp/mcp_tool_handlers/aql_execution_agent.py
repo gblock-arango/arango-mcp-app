@@ -1,8 +1,6 @@
 import logging
 from typing import Any, Dict, List, Optional
 
-from arango.exceptions import AQLQueryExplainError, AQLQueryValidateError
-
 from arango_mcp.gateway_database import GatewayAPIError
 from arango_mcp.mcp_tool_handlers.agent_base import ArangoAgentBase
 from arango_mcp.arango_connector import arango_connector
@@ -111,7 +109,7 @@ class AQLExecutionAgent(ArangoAgentBase):
                 "plan": plan,
             }
 
-        except AQLQueryExplainError as e:
+        except GatewayAPIError as e:
             logger.error(f"AQLExecutionAgent: Explain error - {e}")
             return {
                 "error": f"AQL Explain Error: {e.error_message}",
@@ -136,7 +134,7 @@ class AQLExecutionAgent(ArangoAgentBase):
                 "parse_result": result,
             }
 
-        except AQLQueryValidateError as e:
+        except GatewayAPIError as e:
             logger.error(f"AQLExecutionAgent: Validate error - {e}")
             return {
                 "query": aql_query,
