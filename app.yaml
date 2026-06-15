@@ -1,7 +1,7 @@
 command:
   - "bash"
   - "-lc"
-  - "export PYTHONPATH=src && gunicorn asgi:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${DATABRICKS_APP_PORT:-8000} --workers 2 --timeout 660"
+  - "export PYTHONPATH=src && bash scripts/start-app.sh"
 
 # Bundle note: ``sql_warehouse_id`` in **arango-platform-bundle** ``resources/apps.yml`` can override
 # ``DATABRICKS_SQL_WAREHOUSE_ID`` on deploy. ``config.py`` does not invent a warehouse id.
@@ -10,6 +10,11 @@ env:
   # ---------------------------------------------------------------------------
   # REQUIRED — set (or confirm) for your workspace / bundle
   # ---------------------------------------------------------------------------
+  - name: TEST_DEPLOYMENT_MODE
+    description: >-
+      local_dev = laptop (localhost :8002, remote UC/Serving/Genie).
+      self_managed_platform = Databricks Apps deploy.
+    value: "local_dev"
   - name: DATABRICKS_SQL_WAREHOUSE_ID
     description: >-
       (Required) SQL warehouse id for UC reads, Genie registry SQL, and the sql-warehouse resource below.

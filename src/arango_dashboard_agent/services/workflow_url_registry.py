@@ -82,8 +82,13 @@ def effective_workflow_base_url(cfg: Any) -> str:
     Base URL for HTTP calls to arango-workflow-app (AOE MCP tools).
 
     1. Non-empty ``ARANGO_WORKFLOW_APP_BASE_URL`` wins.
-    2. Otherwise the active row in ``ARANGO_WORKFLOW_REGISTRY_TABLE`` (cached briefly).
+    2. ``local_dev``: fixed localhost URL from deployment profile.
+    3. Otherwise the active row in ``ARANGO_WORKFLOW_REGISTRY_TABLE`` (cached briefly).
     """
+    from arango_dashboard_agent.deployment_profile import is_local_dev, local_workflow_base_url
+
+    if is_local_dev():
+        return local_workflow_base_url()
     explicit = (cfg.get("ARANGO_WORKFLOW_APP_BASE_URL") or "").strip().rstrip("/")
     if explicit:
         return explicit

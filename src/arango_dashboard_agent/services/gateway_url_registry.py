@@ -85,8 +85,13 @@ def effective_gateway_base_url(cfg: Any) -> str:
     Base URL for calls to arango-gateway-app.
 
     1. Non-empty ``ARANGO_GATEWAY_BASE_URL`` (env / ``app.yaml``) wins.
-    2. Otherwise the active row in ``ARANGO_GATEWAY_REGISTRY_TABLE`` (cached briefly).
+    2. ``local_dev``: fixed localhost URL from deployment profile.
+    3. Otherwise the active row in ``ARANGO_GATEWAY_REGISTRY_TABLE`` (cached briefly).
     """
+    from arango_dashboard_agent.deployment_profile import is_local_dev, local_gateway_base_url
+
+    if is_local_dev():
+        return local_gateway_base_url()
     explicit = (cfg.get("ARANGO_GATEWAY_BASE_URL") or "").strip().rstrip("/")
     if explicit:
         return explicit

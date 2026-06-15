@@ -97,6 +97,7 @@ def outbound_bearer_authorization_header(
     *,
     config: Mapping[str, Any] | None = None,
     override_token: str | None = None,
+    peer_url: str | None = None,
 ) -> dict[str, str]:
     """
     ``Authorization`` header for app→app HTTP to peer Databricks Apps.
@@ -105,6 +106,16 @@ def outbound_bearer_authorization_header(
     ``ARANGO_GATEWAY_BEARER_TOKEN`` env → app ``WorkspaceClient`` OAuth (needs CAN_USE on target app).
     """
     import os
+
+    from arango_dashboard_agent.deployment_profile import should_attach_outbound_bearer
+
+    resolved_peer = (peer_url or "").strip()
+    if not resolved_peer and config:
+        from arango_dashboard_agent.services.gateway_url_registry import effective_gateway_base_url
+
+        resolved_peer = effective_gateway_base_url(config)
+    if resolved_peer and not should_attach_outbound_bearer(resolved_peer):
+        return {}
 
     for candidate in (
         (override_token or "").strip(),

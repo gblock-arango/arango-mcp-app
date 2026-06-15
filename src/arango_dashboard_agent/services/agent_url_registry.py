@@ -178,6 +178,11 @@ def resolve_self_app_base_url() -> str | None:
 
 def publish_self_agent_url_to_uc_if_configured(app: Any) -> None:
     """On agent startup, upsert our public URL into UC for consumers (e.g. dashboard)."""
+    from arango_dashboard_agent.deployment_profile import should_publish_peer_url_to_uc
+
+    if not should_publish_peer_url_to_uc():
+        logger.info("Skipping agent URL UC publish (local_dev)")
+        return
     if not bool(app.config.get("ARANGO_AGENT_REGISTRY_AUTO_CREATE", True)):
         return
     table = str(app.config.get("ARANGO_AGENT_REGISTRY_TABLE") or "").strip()
@@ -258,8 +263,13 @@ def effective_agent_base_url(cfg: Any) -> str:
     Base URL for HTTP calls to arango-mcp-app.
 
     1. Non-empty ``ARANGO_AGENT_BASE_URL`` wins.
-    2. Otherwise the active row in ``ARANGO_AGENT_REGISTRY_TABLE`` (cached briefly).
+    2. ``local_dev``: fixed localhost URL from deployment profile.
+    3. Otherwise the active row in ``ARANGO_AGENT_REGISTRY_TABLE`` (cached briefly).
     """
+    from arango_dashboard_agent.deployment_profile import is_local_dev, local_mcp_base_url
+
+    if is_local_dev():
+        return local_mcp_base_url()
     explicit = (cfg.get("ARANGO_AGENT_BASE_URL") or "").strip().rstrip("/")
     if explicit:
         return explicit

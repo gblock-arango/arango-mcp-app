@@ -19,7 +19,8 @@ def _outbound_headers() -> dict[str, str]:
         outbound_bearer_authorization_header,
     )
 
-    return dict(outbound_bearer_authorization_header())
+    base = workflow_app_base_url()
+    return dict(outbound_bearer_authorization_header(peer_url=base))
 
 
 def workflow_request(

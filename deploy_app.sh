@@ -33,6 +33,19 @@ set -euo pipefail
 APP_NAME="${1:-mcp-arango-agent}"
 PROFILE="${3:-}"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_mcp_read_yaml() {
+  local name="$1"
+  local py="${PYTHON_BIN:-python3}"
+  "${py}" "${SCRIPT_DIR}/scripts/read_app_yaml_env.py" "${name}" "${SCRIPT_DIR}/app.yaml" 2>/dev/null || true
+}
+_deploy_mode="$(_mcp_read_yaml TEST_DEPLOYMENT_MODE)"
+if [[ "${_deploy_mode}" == "local_dev" || "${_deploy_mode}" == "local_docker" || "${_deploy_mode}" == "local" ]]; then
+  echo "TEST_DEPLOYMENT_MODE=${_deploy_mode} — local run (skipping Databricks deploy)"
+  bash "${SCRIPT_DIR}/scripts/build-local.sh"
+  exec bash "${SCRIPT_DIR}/scripts/start-local-dev.sh"
+fi
+
 _resolve_ws_user() {
   local args=() user_json user
   [[ -n "${PROFILE}" ]] && args=(--profile "${PROFILE}")
